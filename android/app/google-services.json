@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "162786744614",
+    "project_id": "bookmunity",
+    "storage_bucket": "bookmunity.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:162786744614:android:61cd2493f8254dd98b49e7",
+        "android_client_info": {
+          "package_name": "com.example.bookmunity"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDAizITnRbCAWCcxKAWWfz7VAq40JlWVEI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
