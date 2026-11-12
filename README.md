@@ -1,17 +1,46 @@
-# bookmunity
+# Bookmunity
 
-A new Flutter project.
+Bookmunity is a local-first EPUB reader with Firebase email/password
+authentication, a Drift library, highlights, notes, reading statistics, and a
+neo-brutalist interface.
 
-## Getting Started
+## Run the app
 
-This project is a starting point for a Flutter application.
+```bash
+flutter pub get
+dart run build_runner build
+flutter run
+```
 
-A few resources to get you started if this is your first Flutter project:
+The full EPUB reader uses `flutter_inappwebview` and is intended for Android,
+iOS, macOS, or Windows. Linux and web builds deliberately show
+`READER NEEDS ANDROID OR IOS.` instead of pretending that the native reader is
+available.
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+For Android:
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+1. Install Android Studio and an Android SDK.
+2. Create an emulator with an API level supported by the installed Flutter SDK.
+3. Start the emulator.
+4. Run `flutter devices`, then `flutter run -d <android-device-id>`.
+
+The native reader serves the imported EPUB through a loopback HTTP server on
+`127.0.0.1` with byte-range support. Android cleartext access is restricted to
+that loopback host in `android/app/src/main/res/xml/network_security_config.xml`.
+
+## Firebase
+
+Firebase Auth configuration is generated in `lib/firebase_options.dart`.
+Enable Email/Password in the Firebase Console before testing login and
+signup. Firestore social features require a Firestore database to be selected
+and configured before the social repository is enabled.
+
+## Validation
+
+```bash
+flutter analyze
+flutter test
+```
+
+Metadata tests generate valid EPUB archives in memory and cover EPUB2, EPUB3,
+namespaced metadata, title fallbacks, author fallbacks, and cover resolution.

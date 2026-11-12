@@ -1,18 +1,27 @@
-
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'firebase_options.dart';
-import 'screens/login.dart';
+import 'design/brutal_theme.dart';
+import 'screens/auth_gate.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  await _initializeFirebase();
 
-  runApp(const BookmunityApp());
+  runApp(const ProviderScope(child: BookmunityApp()));
+}
+
+Future<void> _initializeFirebase() async {
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  } on UnsupportedError {
+    // Firebase options are not configured for Linux yet.
+  }
 }
 
 class BookmunityApp extends StatelessWidget {
@@ -23,11 +32,8 @@ class BookmunityApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Bookmunity',
-      theme: ThemeData(
-        useMaterial3: true,
-        scaffoldBackgroundColor: const Color(0xFFFFF8F3),
-      ),
-      home: const LoginPage(),
+      theme: brutalTheme(dark: false),
+      home: const AuthGate(),
     );
   }
 }

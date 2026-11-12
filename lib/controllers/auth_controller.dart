@@ -1,4 +1,3 @@
-
 import 'package:firebase_auth/firebase_auth.dart';
 
 class AuthController {
@@ -10,8 +9,7 @@ class AuthController {
     required String password,
   }) async {
     try {
-      UserCredential credential =
-          await _auth.signInWithEmailAndPassword(
+      UserCredential credential = await _auth.signInWithEmailAndPassword(
         email: email.trim(),
         password: password.trim(),
       );
@@ -26,15 +24,22 @@ class AuthController {
   Future<User?> signupUser({
     required String email,
     required String password,
+    String? displayName,
   }) async {
     try {
-      UserCredential credential =
-          await _auth.createUserWithEmailAndPassword(
+      UserCredential credential = await _auth.createUserWithEmailAndPassword(
         email: email.trim(),
         password: password.trim(),
       );
 
-      return credential.user;
+      final user = credential.user;
+      if (user != null &&
+          displayName != null &&
+          displayName.trim().isNotEmpty) {
+        await user.updateDisplayName(displayName.trim());
+        await user.reload();
+      }
+      return _auth.currentUser;
     } on FirebaseAuthException catch (e) {
       throw Exception(_getFirebaseError(e.code));
     }
@@ -43,6 +48,16 @@ class AuthController {
   // LOGOUT
   Future<void> logout() async {
     await _auth.signOut();
+  }
+
+  Stream<User?> get authStateChanges => _auth.authStateChanges();
+
+  Future<void> sendPasswordReset(String email) async {
+    try {
+      await _auth.sendPasswordResetEmail(email: email.trim());
+    } on FirebaseAuthException catch (e) {
+      throw Exception(_getFirebaseError(e.code));
+    }
   }
 
   // CURRENT USER
