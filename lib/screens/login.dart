@@ -41,19 +41,19 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<void> resetPassword() async {
     if (email.text.trim().isEmpty || !email.text.contains('@')) {
-      _message('ENTER YOUR EMAIL FIRST.');
+      _message('Enter your email first.');
       return;
     }
     try {
       await auth.sendPasswordReset(email.text);
-      if (mounted) _message('RESET EMAIL SENT.');
+      if (mounted) _message('Password reset email sent.');
     } catch (error) {
       if (mounted) _message(_cleanError(error));
     }
   }
 
   String _cleanError(Object error) =>
-      error.toString().replaceFirst('Exception: ', '').toUpperCase();
+      error.toString().replaceFirst('Exception: ', '');
 
   void _message(String message) {
     ScaffoldMessenger.of(context)
@@ -75,43 +75,53 @@ class _LoginPageState extends State<LoginPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'BOOKMUNITY',
+                      'Bookmunity',
                       style: Theme.of(context).textTheme.headlineLarge,
                     ),
-                    const SizedBox(height: 8),
-                    const Text('READ. CONNECT. BELONG.'),
-                    const SizedBox(height: 36),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Read. Connect. Belong.',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 32),
                     BrutalCard(
                       backgroundColor: BrutalColors.yellow,
                       child: Text(
-                        'WELCOME BACK.',
-                        style: Theme.of(context).textTheme.headlineSmall,
+                        'Welcome back',
+                        style: Theme.of(context).textTheme.headlineSmall
+                            ?.copyWith(color: BrutalColors.ink),
                       ),
                     ),
                     const SizedBox(height: 24),
                     _field(
                       controller: email,
-                      label: 'EMAIL',
-                      hint: 'YOU@EXAMPLE.COM',
+                      label: 'Email',
+                      hint: 'you@example.com',
                       keyboardType: TextInputType.emailAddress,
                       validator: (value) =>
                           value == null || !value.contains('@')
-                          ? 'ENTER A VALID EMAIL.'
+                          ? 'Enter a valid email.'
                           : null,
                     ),
                     const SizedBox(height: 16),
                     _field(
                       controller: password,
-                      label: 'PASSWORD',
-                      hint: 'MINIMUM 6 CHARACTERS',
+                      label: 'Password',
+                      hint: 'At least 6 characters',
                       obscureText: obscure,
-                      suffix: BrutalPressable(
+                      suffix: IconButton(
+                        tooltip: obscure ? 'Show password' : 'Hide password',
                         onPressed: () => setState(() => obscure = !obscure),
-                        padding: const EdgeInsets.all(10),
-                        child: Text(obscure ? 'SHOW' : 'HIDE'),
+                        icon: Icon(
+                          obscure
+                              ? Icons.visibility_outlined
+                              : Icons.visibility_off_outlined,
+                        ),
                       ),
                       validator: (value) => value == null || value.length < 6
-                          ? 'PASSWORD IS TOO SHORT.'
+                          ? 'Password is too short.'
                           : null,
                     ),
                     const SizedBox(height: 10),
@@ -119,7 +129,7 @@ class _LoginPageState extends State<LoginPage> {
                       alignment: Alignment.centerRight,
                       child: TextButton(
                         onPressed: resetPassword,
-                        child: const Text('RESET PASSWORD'),
+                        child: const Text('Forgot password?'),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -128,9 +138,9 @@ class _LoginPageState extends State<LoginPage> {
                       child: BrutalPressable(
                         onPressed: loading ? null : submit,
                         backgroundColor: BrutalColors.blue,
-                        foregroundColor: BrutalColors.paper,
+                        foregroundColor: Colors.white,
                         child: Center(
-                          child: Text(loading ? 'SIGNING IN...' : 'SIGN IN ->'),
+                          child: Text(loading ? 'Signing in…' : 'Sign in'),
                         ),
                       ),
                     ),
@@ -141,7 +151,7 @@ class _LoginPageState extends State<LoginPage> {
                           context,
                           MaterialPageRoute(builder: (_) => const SignupPage()),
                         ),
-                        child: const Text('NEW HERE? CREATE ACCOUNT ->'),
+                        child: const Text('New here? Create an account'),
                       ),
                     ),
                   ],
