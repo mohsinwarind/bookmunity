@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../controllers/auth_controller.dart';
+import '../design/brand_logo.dart';
 import '../design/brutal_theme.dart';
 import '../design/brutal_widgets.dart';
 import 'signup.dart';
@@ -56,8 +57,9 @@ class _LoginPageState extends State<LoginPage> {
       error.toString().replaceFirst('Exception: ', '');
 
   void _message(String message) {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -74,15 +76,23 @@ class _LoginPageState extends State<LoginPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Bookmunity',
-                      style: Theme.of(context).textTheme.headlineLarge,
+                    const Center(child: BrandLogo(height: 150)),
+                    const SizedBox(height: 12),
+                    Center(
+                      child: Text(
+                        'Bookmunity',
+                        style: Theme.of(context).textTheme.headlineLarge,
+                      ),
                     ),
                     const SizedBox(height: 6),
-                    Text(
-                      'Read. Connect. Belong.',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    SizedBox(
+                      width: double.infinity,
+                      child: Text(
+                        'Read. Connect. Belong.',
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 32),

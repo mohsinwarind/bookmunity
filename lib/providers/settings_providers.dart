@@ -2,11 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-final settingsProvider = StateNotifierProvider<SettingsNotifier, ReaderSettings>(
-  (ref) {
-    return SettingsNotifier()..load();
-  },
-);
+final settingsProvider =
+    StateNotifierProvider<SettingsNotifier, ReaderSettings>((ref) {
+      return SettingsNotifier()..load();
+    });
 
 final appThemeModeProvider =
     StateNotifierProvider<AppThemeModeNotifier, ThemeMode>((ref) {

@@ -76,7 +76,12 @@ class EpubMetadataExtractor {
           .where((part) => part.isNotEmpty)
           .toList();
       if (parts.isEmpty) continue;
-      final generic = {'fiction', 'nonfiction', 'non-fiction', 'juvenile fiction'};
+      final generic = {
+        'fiction',
+        'nonfiction',
+        'non-fiction',
+        'juvenile fiction',
+      };
       final specific = parts.lastWhere(
         (part) => !generic.contains(part.toLowerCase()),
         orElse: () => parts.last,
@@ -292,12 +297,11 @@ class EpubMetadataExtractor {
     return '${_slug(title)}|${_slug(author)}';
   }
 
-  String _slug(String value) =>
-      _clean(value)
-          .toLowerCase()
-          .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
-          .replaceAll(RegExp(r'-+'), '-')
-          .replaceAll(RegExp(r'^-|-$'), '');
+  String _slug(String value) => _clean(value)
+      .toLowerCase()
+      .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
+      .replaceAll(RegExp(r'-+'), '-')
+      .replaceAll(RegExp(r'^-|-$'), '');
 
   String _clean(String value) => value.replaceAll(RegExp(r'\s+'), ' ').trim();
 }

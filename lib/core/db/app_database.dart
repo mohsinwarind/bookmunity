@@ -161,9 +161,9 @@ class AppDatabase extends _$AppDatabase {
 
   Selectable<int> _highlightCount() {
     final count = highlights.id.count();
-    return (selectOnly(highlights)..addColumns([count])).map(
-      (row) => row.read(count) ?? 0,
-    );
+    return (selectOnly(
+      highlights,
+    )..addColumns([count])).map((row) => row.read(count) ?? 0);
   }
 
   Future<int> addHighlight(HighlightsCompanion highlight) =>
@@ -269,15 +269,14 @@ class AppDatabase extends _$AppDatabase {
     return row?.responseJson;
   }
 
-  Future<void> cacheDefinition(String word, String json) => into(
-    dictionaryCaches,
-  ).insertOnConflictUpdate(
-    DictionaryCachesCompanion.insert(
-      word: word,
-      responseJson: json,
-      cachedAt: DateTime.now(),
-    ),
-  );
+  Future<void> cacheDefinition(String word, String json) =>
+      into(dictionaryCaches).insertOnConflictUpdate(
+        DictionaryCachesCompanion.insert(
+          word: word,
+          responseJson: json,
+          cachedAt: DateTime.now(),
+        ),
+      );
 
   Future<void> deleteBook(Book book) async {
     await transaction(() async {

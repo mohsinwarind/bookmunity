@@ -1,3 +1,7 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'social_models.dart';
@@ -8,6 +12,17 @@ class UsernameTakenException implements Exception {
 
   @override
   String toString() => '“$username” is already taken.';
+}
+
+/// Whether [username] is free. Works before sign-in (the rules allow a
+/// public `get` on `usernames/{name}`), so signup can check it up front.
+Future<bool> isUsernameAvailable(FirebaseFirestore db, String username) async {
+  final lower = username.trim().toLowerCase();
+  final doc = await db
+      .collection('usernames')
+      .doc(lower)
+      .get(const GetOptions(source: Source.server));
+  return !doc.exists;
 }
 
 /// All social reads and writes. Every write mirrors a rule in
@@ -24,16 +39,16 @@ class SocialRepository {
       _db.collection('profiles');
   CollectionReference<Map<String, dynamic>> get _usernames =>
       _db.collection('usernames');
+  CollectionReference<Map<String, dynamic>> get _avatars =>
+      _db.collection('avatars');
   CollectionReference<Map<String, dynamic>> get _requests =>
       _db.collection('friendRequests');
   CollectionReference<Map<String, dynamic>> _friendsOf(String owner) =>
       _db.collection('users').doc(owner).collection('friends');
   CollectionReference<Map<String, dynamic>> _activityOf(String owner) =>
       _db.collection('users').doc(owner).collection('activity');
-  CollectionReference<Map<String, dynamic>> _reviewsOf(String bookKey) => _db
-      .collection('books')
-      .doc(reviewDocKey(bookKey))
-      .collection('reviews');
+  CollectionReference<Map<String, dynamic>> _reviewsOf(String bookKey) =>
+      _db.collection('books').doc(reviewDocKey(bookKey)).collection('reviews');
 
   // ------------------------------------------------------------ profile
 
@@ -41,6 +56,47 @@ class SocialRepository {
       .doc(uid)
       .snapshots()
       .map((doc) => doc.exists ? Profile.fromDoc(doc) : null);
+
+  /// Profile state for the startup gate. A cached "no such document" is not
+  /// trusted (a fresh install has an empty cache); only the server can say
+  /// the profile is missing. Errors, or no answer in time, mean Firestore
+  /// is unavailable and the user is let in without social features.
+  Stream<ProfileStatus> watchMyProfileStatus({
+    Duration timeout = const Duration(seconds: 10),
+  }) {
+    final controller = StreamController<ProfileStatus>();
+    StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? subscription;
+    Timer? timer;
+    var last = ProfileStatus.loading;
+
+    void emit(ProfileStatus status) {
+      if (status == last && status != ProfileStatus.loading) return;
+      last = status;
+      controller.add(status);
+    }
+
+    controller.onListen = () {
+      emit(ProfileStatus.loading);
+      timer = Timer(timeout, () {
+        if (last == ProfileStatus.loading) emit(ProfileStatus.unavailable);
+      });
+      subscription = _profiles
+          .doc(uid)
+          .snapshots(includeMetadataChanges: true)
+          .listen((doc) {
+            if (doc.exists) {
+              emit(ProfileStatus.ready);
+            } else if (!doc.metadata.isFromCache) {
+              emit(ProfileStatus.missing);
+            }
+          }, onError: (Object _) => emit(ProfileStatus.unavailable));
+    };
+    controller.onCancel = () async {
+      timer?.cancel();
+      await subscription?.cancel();
+    };
+    return controller.stream;
+  }
 
   Future<Profile?> profile(String userId) async {
     final doc = await _profiles.doc(userId).get();
@@ -79,12 +135,65 @@ class SocialRepository {
     });
   }
 
-  Future<void> updateProfile({String? displayName, ProfileStats? stats}) =>
-      _profiles.doc(uid).update({
-        if (displayName != null) 'displayName': clipDisplayName(displayName),
-        ...?stats?.toJson(),
+  Future<void> updateProfile({
+    String? displayName,
+    String? bio,
+    ProfileStats? stats,
+  }) => _profiles.doc(uid).update({
+    if (displayName != null) 'displayName': clipDisplayName(displayName),
+    if (bio != null) 'bio': clipBio(bio),
+    ...?stats?.toJson(),
+    'updatedAt': FieldValue.serverTimestamp(),
+  });
+
+  // ------------------------------------------------------------- photos
+  //
+  // Photos live in their own collection so profile reads (search results,
+  // friend lists) stay small; the profile only carries `hasPhoto`.
+
+  /// The uploaded photo of [userId], or null when they use the cute avatar.
+  Stream<Uint8List?> watchPhoto(String userId) =>
+      _avatars.doc(userId).snapshots().map((doc) {
+        final photo = doc.data()?['photo'];
+        if (photo is! String || photo.isEmpty) return null;
+        try {
+          return base64Decode(photo);
+        } on FormatException {
+          return null;
+        }
+      });
+
+  /// Stores [jpeg] (already resized, see `photo_processing.dart`).
+  Future<void> setPhoto(Uint8List jpeg) {
+    final encoded = base64Encode(jpeg);
+    if (encoded.length > maxPhotoChars) {
+      throw ArgumentError('Photo is too large after resizing.');
+    }
+    final batch = _db.batch()
+      ..set(_avatars.doc(uid), {
+        'uid': uid,
+        'photo': encoded,
+        'updatedAt': FieldValue.serverTimestamp(),
+      })
+      ..update(_profiles.doc(uid), {
+        'hasPhoto': true,
         'updatedAt': FieldValue.serverTimestamp(),
       });
+    return batch.commit();
+  }
+
+  Future<void> removePhoto() {
+    final batch = _db.batch()
+      ..delete(_avatars.doc(uid))
+      ..update(_profiles.doc(uid), {
+        'hasPhoto': false,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    return batch.commit();
+  }
+
+  /// Mirrors the size limit in firestore.rules (base64 characters).
+  static const maxPhotoChars = 150000;
 
   /// Prefix search on usernames (case-insensitive).
   Future<List<Profile>> searchUsers(String query) async {
@@ -105,18 +214,15 @@ class SocialRepository {
   // ------------------------------------------------------------ friends
 
   Stream<List<Friend>> watchFriends() => _friendsOf(uid).snapshots().map(
-    (snapshot) =>
-        snapshot.docs.map(Friend.fromDoc).toList()..sort(
-          (a, b) => a.displayName.toLowerCase().compareTo(
-            b.displayName.toLowerCase(),
-          ),
-        ),
+    (snapshot) => snapshot.docs.map(Friend.fromDoc).toList()
+      ..sort(
+        (a, b) =>
+            a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()),
+      ),
   );
 
-  Stream<List<FriendRequest>> watchIncomingRequests() => _requests
-      .where('toUid', isEqualTo: uid)
-      .snapshots()
-      .map(_sortedRequests);
+  Stream<List<FriendRequest>> watchIncomingRequests() =>
+      _requests.where('toUid', isEqualTo: uid).snapshots().map(_sortedRequests);
 
   Stream<List<FriendRequest>> watchOutgoingRequests() => _requests
       .where('fromUid', isEqualTo: uid)
@@ -125,12 +231,11 @@ class SocialRepository {
 
   List<FriendRequest> _sortedRequests(
     QuerySnapshot<Map<String, dynamic>> snapshot,
-  ) =>
-      snapshot.docs.map(FriendRequest.fromDoc).toList()..sort(
-        (a, b) => (b.createdAt ?? DateTime(0)).compareTo(
-          a.createdAt ?? DateTime(0),
-        ),
-      );
+  ) => snapshot.docs.map(FriendRequest.fromDoc).toList()
+    ..sort(
+      (a, b) =>
+          (b.createdAt ?? DateTime(0)).compareTo(a.createdAt ?? DateTime(0)),
+    );
 
   Future<void> sendRequest({required Profile me, required Profile to}) =>
       _requests.doc('${uid}_${to.uid}').set({

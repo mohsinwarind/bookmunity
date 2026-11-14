@@ -15,12 +15,22 @@ rules_version = '2';
 //   - currentStreak: int (required, 0..100000)
 //   - longestStreak: int (required, 0..100000)
 //   - badgeCount: int (required, 0..100)
+//   - bio: string (optional, 0-160 chars)
+//   - hasPhoto: bool (optional; true when avatars/{uid} holds a photo)
 //   - createdAt: timestamp (required, == request.time on create, immutable)
 //   - updatedAt: timestamp (required, == request.time on every write)
 //
+// Collection: avatars             Document ID: {uid}
+//   Uploaded profile photo, kept apart from profiles so list reads stay
+//   small. Readable by any signed-in user.
+//   - uid: string (== document ID)
+//   - photo: string (base64 JPEG, 1..150000 chars, ~110 KB)
+//   - updatedAt: timestamp (== request.time)
+//
 // Collection: usernames           Document ID: {usernameLower}
 //   Uniqueness index for usernames, claimed in the same batch as the
-//   profile. Never updated or deleted by clients.
+//   profile. Never updated or deleted by clients. Single-document reads
+//   are public so signup can check availability before the account exists.
 //   - uid: string (required, == request.auth.uid)
 //
 // Collection: friendRequests      Document ID: {fromUid}_{toUid}
@@ -121,7 +131,7 @@ service cloud.firestore {
       let data = incoming();
       return data.keys().hasOnly(['uid', 'username', 'usernameLower', 'displayName',
           'booksFinished', 'currentStreak', 'longestStreak', 'badgeCount',
-          'createdAt', 'updatedAt'])
+          'bio', 'hasPhoto', 'createdAt', 'updatedAt'])
         && data.keys().hasAll(['uid', 'username', 'usernameLower', 'displayName',
           'booksFinished', 'currentStreak', 'longestStreak', 'badgeCount',
           'createdAt', 'updatedAt'])
@@ -133,6 +143,8 @@ service cloud.firestore {
         && isInt(data.currentStreak, 0, 100000)
         && isInt(data.longestStreak, 0, 100000)
         && isInt(data.badgeCount, 0, 100)
+        && (!('bio' in data) || isString(data.bio, 0, 160))
+        && (!('hasPhoto' in data) || data.hasPhoto is bool)
         && data.createdAt is timestamp
         && data.updatedAt == request.time;
     }
@@ -221,8 +233,23 @@ service cloud.firestore {
     // -------------------------------------------------------------
     // usernames
     // -------------------------------------------------------------
-    match /usernames/{name} {
+    match /avatars/{uid} {
       allow read: if isAuthenticated();
+      allow create, update: if isOwner(uid)
+        && incoming().keys().hasOnly(['uid', 'photo', 'updatedAt'])
+        && incoming().keys().hasAll(['uid', 'photo', 'updatedAt'])
+        && incoming().uid == uid
+        && isString(incoming().photo, 1, 150000)
+        && incoming().updatedAt == request.time;
+      allow delete: if isOwner(uid);
+    }
+
+    // -------------------------------------------------------------
+    // usernames
+    // -------------------------------------------------------------
+    match /usernames/{name} {
+      allow get: if true;
+      allow list: if isAuthenticated();
       allow create: if isAuthenticated()
         && name.matches('^[a-z0-9_]{3,20}$')
         && incoming().keys().hasOnly(['uid'])

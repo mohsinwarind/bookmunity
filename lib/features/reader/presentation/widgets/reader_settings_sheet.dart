@@ -216,10 +216,7 @@ class _SliderRow extends StatelessWidget {
             onChanged: onChanged,
           ),
         ),
-        SizedBox(
-          width: 32,
-          child: Text(display, textAlign: TextAlign.end),
-        ),
+        SizedBox(width: 32, child: Text(display, textAlign: TextAlign.end)),
       ],
     );
   }

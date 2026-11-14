@@ -6,8 +6,10 @@ import '../../../design/brutal_widgets.dart';
 import '../../../design/formatters.dart';
 import '../data/social_models.dart';
 import '../data/social_providers.dart';
-import '../data/social_repository.dart';
+import 'choose_username_screen.dart';
 import 'friend_profile_screen.dart';
+import 'my_profile_screen.dart';
+import 'user_avatar.dart';
 
 class FriendsScreen extends ConsumerWidget {
   const FriendsScreen({super.key});
@@ -40,139 +42,8 @@ class FriendsScreen extends ConsumerWidget {
           message: socialErrorMessage(error),
         ),
       ),
-      data: (me) => me == null ? const _ChooseUsername() : _FriendsHome(me: me),
-    );
-  }
-}
-
-// ------------------------------------------------------------ onboarding
-
-class _ChooseUsername extends ConsumerStatefulWidget {
-  const _ChooseUsername();
-
-  @override
-  ConsumerState<_ChooseUsername> createState() => _ChooseUsernameState();
-}
-
-class _ChooseUsernameState extends ConsumerState<_ChooseUsername> {
-  final _form = GlobalKey<FormState>();
-  final _username = TextEditingController();
-  late final _displayName = TextEditingController(
-    text: ref.read(authUserProvider).valueOrNull?.displayName ?? '',
-  );
-  bool _saving = false;
-  String? _error;
-
-  @override
-  void dispose() {
-    _username.dispose();
-    _displayName.dispose();
-    super.dispose();
-  }
-
-  Future<void> _save() async {
-    if (!_form.currentState!.validate()) return;
-    final repository = ref.read(socialRepositoryProvider);
-    if (repository == null) return;
-    setState(() {
-      _saving = true;
-      _error = null;
-    });
-    try {
-      ProfileStats stats;
-      try {
-        stats = await ref.read(socialActivityProvider).currentStats();
-      } catch (_) {
-        stats = ProfileStats.zero;
-      }
-      await repository.createProfile(
-        username: _username.text,
-        displayName: _displayName.text,
-        stats: stats,
-      );
-    } catch (error) {
-      if (mounted) setState(() => _error = socialErrorMessage(error));
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Scaffold(
-      appBar: const BrutalAppBar(title: 'Friends'),
-      body: ListView(
-        padding: const EdgeInsets.all(24),
-        children: [
-          BrutalCard(
-            backgroundColor: BrutalColors.pink,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Read with friends',
-                  style: theme.textTheme.headlineSmall?.copyWith(
-                    color: BrutalColors.ink,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                const Text(
-                  'Pick a username so friends can find you. Friends see the '
-                  'books you start and finish, your badges and your reviews. '
-                  'Your email is never shared.',
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
-          Form(
-            key: _form,
-            child: Column(
-              children: [
-                TextFormField(
-                  controller: _username,
-                  autocorrect: false,
-                  textInputAction: TextInputAction.next,
-                  decoration: const InputDecoration(
-                    labelText: 'Username',
-                    prefixText: '@',
-                    helperText: '3–20 letters, numbers or underscores',
-                  ),
-                  validator: Usernames.validate,
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _displayName,
-                  maxLength: 50,
-                  textCapitalization: TextCapitalization.words,
-                  decoration: const InputDecoration(labelText: 'Display name'),
-                  validator: (value) => (value?.trim().isEmpty ?? true)
-                      ? 'Enter the name friends will see.'
-                      : null,
-                ),
-              ],
-            ),
-          ),
-          if (_error != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(
-                _error!,
-                style: TextStyle(color: theme.colorScheme.error),
-              ),
-            ),
-          const SizedBox(height: 20),
-          BrutalPressable(
-            onPressed: _saving ? null : _save,
-            backgroundColor: BrutalColors.blue,
-            foregroundColor: Colors.white,
-            child: Center(
-              child: Text(_saving ? 'Saving…' : 'Create my profile'),
-            ),
-          ),
-        ],
-      ),
+      data: (me) =>
+          me == null ? const ChooseUsernameScreen() : _FriendsHome(me: me),
     );
   }
 }
@@ -186,13 +57,21 @@ class _FriendsHome extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final incoming = ref.watch(incomingRequestsProvider).valueOrNull ?? const [];
+    final incoming =
+        ref.watch(incomingRequestsProvider).valueOrNull ?? const [];
     return DefaultTabController(
       length: 3,
       child: Scaffold(
         appBar: BrutalAppBar(
           title: 'Friends',
           actions: [
+            IconButton(
+              tooltip: 'My profile',
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const MyProfileScreen()),
+              ),
+              icon: UserAvatar(uid: me.uid, hasPhoto: me.hasPhoto, size: 30),
+            ),
             IconButton(
               tooltip: 'Add a friend',
               icon: const Icon(Icons.person_add_alt),
@@ -311,9 +190,30 @@ class ActivityTile extends StatelessWidget {
       ),
     };
     return ListTile(
-      leading: CircleAvatar(
-        backgroundColor: color,
-        child: Icon(icon, color: BrutalColors.ink),
+      leading: SizedBox.square(
+        dimension: 44,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            UserAvatar(uid: activity.ownerUid, size: 40),
+            Positioned(
+              right: -2,
+              bottom: -2,
+              child: Container(
+                padding: const EdgeInsets.all(3),
+                decoration: BoxDecoration(
+                  color: color,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: theme.colorScheme.surface,
+                    width: 1.5,
+                  ),
+                ),
+                child: Icon(icon, size: 12, color: BrutalColors.ink),
+              ),
+            ),
+          ],
+        ),
       ),
       title: Text.rich(
         TextSpan(
@@ -328,8 +228,7 @@ class ActivityTile extends StatelessWidget {
       ),
       subtitle: Text(
         [
-          if (activity.author.isNotEmpty &&
-              activity.type != ActivityType.badge)
+          if (activity.author.isNotEmpty && activity.type != ActivityType.badge)
             activity.author,
           if (activity.createdAt != null) formatDate(activity.createdAt!),
         ].join(' · '),
@@ -358,7 +257,8 @@ class _FriendsTab extends ConsumerWidget {
           ? EmptyState(
               icon: Icons.people_outline,
               title: 'No friends yet',
-              message: 'You are @${me.username}. Search for a friend’s username to connect.',
+              message:
+                  'You are @${me.username}. Search for a friend’s username to connect.',
               action: BrutalPressable(
                 onPressed: () => _showSearch(context, me),
                 child: const Text('Find friends'),
@@ -370,15 +270,11 @@ class _FriendsTab extends ConsumerWidget {
               itemBuilder: (context, index) {
                 final friend = items[index];
                 return ListTile(
-                  leading: _Avatar(name: friend.displayName),
+                  leading: UserAvatar(uid: friend.uid),
                   title: Text(friend.displayName),
                   subtitle: Text('@${friend.username}'),
                   trailing: const Icon(Icons.chevron_right),
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => FriendProfileScreen(uid: friend.uid),
-                    ),
-                  ),
+                  onTap: () => _openProfile(context, friend.uid),
                 );
               },
             ),
@@ -393,8 +289,10 @@ class _RequestsTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final incoming = ref.watch(incomingRequestsProvider).valueOrNull ?? const [];
-    final outgoing = ref.watch(outgoingRequestsProvider).valueOrNull ?? const [];
+    final incoming =
+        ref.watch(incomingRequestsProvider).valueOrNull ?? const [];
+    final outgoing =
+        ref.watch(outgoingRequestsProvider).valueOrNull ?? const [];
     final repository = ref.watch(socialRepositoryProvider)!;
     if (incoming.isEmpty && outgoing.isEmpty) {
       return const EmptyState(
@@ -402,7 +300,10 @@ class _RequestsTab extends ConsumerWidget {
         title: 'No pending requests',
       );
     }
-    Future<void> run(BuildContext context, Future<void> Function() action) async {
+    Future<void> run(
+      BuildContext context,
+      Future<void> Function() action,
+    ) async {
       final messenger = ScaffoldMessenger.of(context);
       try {
         await action();
@@ -423,7 +324,8 @@ class _RequestsTab extends ConsumerWidget {
           ),
           for (final request in incoming)
             ListTile(
-              leading: _Avatar(name: request.fromDisplayName),
+              leading: UserAvatar(uid: request.fromUid),
+              onTap: () => _openProfile(context, request.fromUid),
               title: Text(request.fromDisplayName),
               subtitle: Text('@${request.fromUsername}'),
               trailing: Row(
@@ -457,7 +359,8 @@ class _RequestsTab extends ConsumerWidget {
           ),
           for (final request in outgoing)
             ListTile(
-              leading: _Avatar(name: request.toDisplayName),
+              leading: UserAvatar(uid: request.toUid),
+              onTap: () => _openProfile(context, request.toUid),
               title: Text(request.toDisplayName),
               subtitle: Text('@${request.toUsername} · waiting'),
               trailing: TextButton(
@@ -516,9 +419,9 @@ class _UserSearchState extends ConsumerState<_UserSearch> {
       _error = null;
     });
     try {
-      final results = await ref.read(socialRepositoryProvider)!.searchUsers(
-        query,
-      );
+      final results = await ref
+          .read(socialRepositoryProvider)!
+          .searchUsers(query);
       if (mounted && query == _query) setState(() => _results = results);
     } catch (error) {
       if (mounted) setState(() => _error = socialErrorMessage(error));
@@ -530,7 +433,8 @@ class _UserSearchState extends ConsumerState<_UserSearch> {
   @override
   Widget build(BuildContext context) {
     final friends = {
-      for (final friend in ref.watch(friendsProvider).valueOrNull ?? const <Friend>[])
+      for (final friend
+          in ref.watch(friendsProvider).valueOrNull ?? const <Friend>[])
         friend.uid,
     };
     final sent = {
@@ -561,10 +465,7 @@ class _UserSearchState extends ConsumerState<_UserSearch> {
         ),
         if (_searching) const LinearProgressIndicator(),
         if (_error != null)
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Text(_error!),
-          ),
+          Padding(padding: const EdgeInsets.all(16), child: Text(_error!)),
         Expanded(
           child: _query.isNotEmpty && !_searching && _results.isEmpty
               ? const EmptyState(
@@ -603,7 +504,11 @@ class _UserSearchState extends ConsumerState<_UserSearch> {
                       );
                     }
                     return ListTile(
-                      leading: _Avatar(name: profile.displayName),
+                      onTap: () => _openProfile(context, profile.uid),
+                      leading: UserAvatar(
+                        uid: profile.uid,
+                        hasPhoto: profile.hasPhoto,
+                      ),
                       title: Text(profile.displayName),
                       subtitle: Text('@${profile.username}'),
                       trailing: trailing,
@@ -616,19 +521,8 @@ class _UserSearchState extends ConsumerState<_UserSearch> {
   }
 }
 
-class _Avatar extends StatelessWidget {
-  const _Avatar({required this.name});
-
-  final String name;
-
-  @override
-  Widget build(BuildContext context) {
-    final initial = name.trim().isEmpty ? '?' : name.trim()[0].toUpperCase();
-    return CircleAvatar(
-      backgroundColor:
-          BrutalColors.accents[initial.codeUnitAt(0) % BrutalColors.accents.length],
-      foregroundColor: BrutalColors.ink,
-      child: Text(initial, style: const TextStyle(fontWeight: FontWeight.w700)),
-    );
-  }
+void _openProfile(BuildContext context, String uid) {
+  Navigator.of(
+    context,
+  ).push(MaterialPageRoute(builder: (_) => FriendProfileScreen(uid: uid)));
 }

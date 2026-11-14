@@ -7,6 +7,8 @@ import '../design/brutal_widgets.dart';
 import '../features/reader/presentation/widgets/reader_settings_sheet.dart';
 import '../features/social/data/social_providers.dart';
 import '../features/social/presentation/friends_screen.dart';
+import '../features/social/presentation/my_profile_screen.dart';
+import '../features/social/presentation/user_avatar.dart';
 import '../providers/app_providers.dart';
 import '../providers/settings_providers.dart';
 
@@ -28,13 +30,25 @@ class SettingsScreen extends ConsumerWidget {
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
         children: [
           BrutalCard(
+            onTap: profile == null
+                ? null
+                : () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const MyProfileScreen()),
+                  ),
             child: Row(
               children: [
-                const CircleAvatar(
-                  radius: 24,
-                  backgroundColor: BrutalColors.blue,
-                  child: Icon(Icons.person_outline, color: Colors.white),
-                ),
+                if (user != null)
+                  UserAvatar(
+                    uid: user.uid,
+                    hasPhoto: profile?.hasPhoto ?? false,
+                    size: 48,
+                  )
+                else
+                  const CircleAvatar(
+                    radius: 24,
+                    backgroundColor: BrutalColors.blue,
+                    child: Icon(Icons.person_outline, color: Colors.white),
+                  ),
                 const SizedBox(width: 14),
                 Expanded(
                   child: Column(
@@ -108,9 +122,9 @@ class SettingsScreen extends ConsumerWidget {
               title: const Text('Choose a username'),
               subtitle: const Text('Needed for friends and reviews'),
               trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const FriendsScreen()),
-              ),
+              onTap: () => Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const FriendsScreen())),
             ),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
@@ -183,6 +197,8 @@ class SettingsScreen extends ConsumerWidget {
     );
     if (confirmed != true) return;
     await AuthController().logout();
-    if (context.mounted) Navigator.of(context).popUntil((route) => route.isFirst);
+    if (context.mounted) {
+      Navigator.of(context).popUntil((route) => route.isFirst);
+    }
   }
 }

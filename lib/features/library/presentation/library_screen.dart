@@ -60,12 +60,14 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       final duplicates = results.where((result) => result.duplicate).length;
       final added = results.length - duplicates;
       _showMessage(switch ((added, duplicates)) {
-        (_, 0) => added == 1
-            ? 'Added “${results.first.title}”.'
-            : 'Added $added books.',
-        (0, _) => duplicates == 1
-            ? '“${results.first.title}” is already in your library.'
-            : 'Those books are already in your library.',
+        (_, 0) =>
+          added == 1
+              ? 'Added “${results.first.title}”.'
+              : 'Added $added books.',
+        (0, _) =>
+          duplicates == 1
+              ? '“${results.first.title}” is already in your library.'
+              : 'Those books are already in your library.',
         _ => 'Added $added, skipped $duplicates already in your library.',
       });
     } on FormatException catch (error) {
@@ -233,7 +235,8 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                     itemCount: filtered.length,
                     itemBuilder: (_, index) => _BookTile(
                       book: filtered[index],
-                      onTap: () => _push(BookDetailScreen(book: filtered[index])),
+                      onTap: () =>
+                          _push(BookDetailScreen(book: filtered[index])),
                     ),
                   ),
                 )
@@ -246,7 +249,8 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                     itemBuilder: (_, index) => _BookTile(
                       book: filtered[index],
                       compact: true,
-                      onTap: () => _push(BookDetailScreen(book: filtered[index])),
+                      onTap: () =>
+                          _push(BookDetailScreen(book: filtered[index])),
                     ),
                   ),
                 ),
@@ -345,7 +349,11 @@ class _ContinueReading extends StatelessWidget {
 }
 
 class _BookTile extends StatelessWidget {
-  const _BookTile({required this.book, required this.onTap, this.compact = false});
+  const _BookTile({
+    required this.book,
+    required this.onTap,
+    this.compact = false,
+  });
 
   final Book book;
   final VoidCallback onTap;
@@ -375,7 +383,11 @@ class _BookTile extends StatelessWidget {
         if (book.isFinished)
           Row(
             children: [
-              const Icon(Icons.check_circle, size: 14, color: BrutalColors.green),
+              const Icon(
+                Icons.check_circle,
+                size: 14,
+                color: BrutalColors.green,
+              ),
               const SizedBox(width: 4),
               Text('Finished', style: theme.textTheme.bodySmall),
             ],

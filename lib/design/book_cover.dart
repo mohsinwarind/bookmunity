@@ -39,9 +39,17 @@ class BookCover extends StatelessWidget {
       decoration: BoxDecoration(
         color: colorFor(title),
         borderRadius: BrutalTokens.smallBorderRadius,
-        border: Border.all(color: scheme.outline, width: BrutalTokens.borderWidth),
+        border: Border.all(
+          color: scheme.outline,
+          width: BrutalTokens.borderWidth,
+        ),
         boxShadow: shadow
-            ? [BoxShadow(color: scheme.outline, offset: BrutalTokens.shadowOffset)]
+            ? [
+                BoxShadow(
+                  color: scheme.outline,
+                  offset: BrutalTokens.shadowOffset,
+                ),
+              ]
             : null,
         image: image == null
             ? null

@@ -30,12 +30,12 @@ class StatsScreen extends ConsumerWidget {
                 unlock.badgeId: unlock.unlockedAt,
             },
           ),
-        (AsyncError(:final error), _) || (_, AsyncError(:final error)) =>
-          EmptyState(
-            icon: Icons.error_outline,
-            title: 'Stats could not be loaded',
-            message: '$error',
-          ),
+        (AsyncError(:final error), _) ||
+        (_, AsyncError(:final error)) => EmptyState(
+          icon: Icons.error_outline,
+          title: 'Stats could not be loaded',
+          message: '$error',
+        ),
         _ => const Center(child: CircularProgressIndicator()),
       },
     );
@@ -349,9 +349,7 @@ class _BadgeTile extends StatelessWidget {
                   ? theme.colorScheme.outline
                   : theme.colorScheme.outlineVariant,
             ),
-            color: earned
-                ? accent.withValues(alpha: 0.12)
-                : Colors.transparent,
+            color: earned ? accent.withValues(alpha: 0.12) : Colors.transparent,
           ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,

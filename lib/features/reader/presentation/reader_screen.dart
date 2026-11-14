@@ -99,9 +99,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
       for (final highlight in await database.getHighlights(_book.id)) {
         _highlights[highlight.id] = highlight;
       }
-      _bookmarkSubscription = database.watchBookmarks(_book.id).listen((
-        items,
-      ) {
+      _bookmarkSubscription = database.watchBookmarks(_book.id).listen((items) {
         _bookmarks = items;
         _send('setBookmarks', {
           'cfis': [for (final bookmark in items) bookmark.cfi],
@@ -170,7 +168,10 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
 
   // ------------------------------------------------------------- bridge
 
-  Future<void> _send(String name, [Map<String, Object?> args = const {}]) async {
+  Future<void> _send(
+    String name, [
+    Map<String, Object?> args = const {},
+  ]) async {
     final controller = _controller;
     if (controller == null || !_started) return;
     try {
@@ -196,7 +197,9 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
         url: _server!.url.toString(),
         cfi: widget.initialCfi ?? _book.lastCfi,
         settings: ref.read(settingsProvider).toReaderJson(),
-        highlights: [for (final item in _highlights.values) _highlightArgs(item)],
+        highlights: [
+          for (final item in _highlights.values) _highlightArgs(item),
+        ],
         bookmarks: [for (final bookmark in _bookmarks) bookmark.cfi],
         locations: _book.locationsJson,
       ),
@@ -262,7 +265,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
       case 'error':
         setState(
           () => _fatalError =
-              (payload['message'] as String?) ?? 'This book could not be opened.',
+              (payload['message'] as String?) ??
+              'This book could not be opened.',
         );
       case 'jsError':
         debugPrint('Reader script: ${payload['message']}');
@@ -679,7 +683,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
       onReceivedError: (controller, request, error) {
         if (request.isForMainFrame == true && mounted) {
           setState(
-            () => _fatalError = 'The reader failed to load: ${error.description}',
+            () =>
+                _fatalError = 'The reader failed to load: ${error.description}',
           );
         }
       },

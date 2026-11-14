@@ -42,7 +42,14 @@ class DictionaryPreview extends ConsumerWidget {
                 child: CircularProgressIndicator(strokeWidth: 2),
               ),
               const SizedBox(width: 10),
-              Text('Looking up “$word”…', style: theme.textTheme.bodySmall),
+              Expanded(
+                child: Text(
+                  'Looking up “$word”…',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall,
+                ),
+              ),
             ],
           ),
           error: (error, _) =>
@@ -55,12 +62,23 @@ class DictionaryPreview extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.baseline,
                   textBaseline: TextBaseline.alphabetic,
                   children: [
-                    Text(entry.word, style: theme.textTheme.titleMedium),
-                    if (entry.phonetic != null) ...[
-                      const SizedBox(width: 8),
-                      Text(entry.phonetic!, style: theme.textTheme.bodySmall),
-                    ],
-                    const Spacer(),
+                    Expanded(
+                      child: Text.rich(
+                        TextSpan(
+                          text: entry.word,
+                          style: theme.textTheme.titleMedium,
+                          children: [
+                            if (entry.phonetic != null)
+                              TextSpan(
+                                text: '  ${entry.phonetic}',
+                                style: theme.textTheme.bodySmall,
+                              ),
+                          ],
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
                     if (onMore != null)
                       Text(
                         'More',
@@ -123,7 +141,8 @@ class _DictionaryDetail extends ConsumerWidget {
     final result = ref.watch(definitionProvider(word));
     return result.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (error, _) => Center(child: Text('Dictionary unavailable: $error')),
+      error: (error, _) =>
+          Center(child: Text('Dictionary unavailable: $error')),
       data: (value) {
         if (value is! DictionaryFound) {
           return ListView(

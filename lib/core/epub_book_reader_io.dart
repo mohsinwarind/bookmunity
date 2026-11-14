@@ -18,10 +18,9 @@ class EpubBookReader {
   static String extractText(List<int> bytes) {
     final archive = ZipDecoder().decodeBytes(bytes);
     final containerXml = _readFileText(archive, 'META-INF/container.xml');
-    final rootFilePath = XmlDocument.parse(containerXml)
-        .findAllElements('rootfile')
-        .firstOrNull
-        ?.getAttribute('full-path');
+    final rootFilePath = XmlDocument.parse(
+      containerXml,
+    ).findAllElements('rootfile').firstOrNull?.getAttribute('full-path');
 
     if (rootFilePath == null || rootFilePath.isEmpty) {
       return 'This EPUB does not include a readable book manifest.';

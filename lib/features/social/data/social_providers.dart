@@ -30,6 +30,24 @@ final myProfileProvider = StreamProvider<Profile?>((ref) {
   return repository?.watchMyProfile() ?? Stream.value(null);
 });
 
+/// Startup gate state: does the signed-in user have a profile yet?
+final myProfileStatusProvider = StreamProvider<ProfileStatus>((ref) {
+  final repository = ref.watch(socialRepositoryProvider);
+  if (repository == null) return Stream.value(ProfileStatus.unavailable);
+  return repository.watchMyProfileStatus();
+});
+
+/// Set by signup while it creates the profile, so the gate shows a spinner
+/// instead of flashing the username screen.
+final signupInProgressProvider = StateProvider<bool>((ref) => false);
+
+/// Uploaded photo for a user (null when they use the cute avatar).
+final profilePhotoProvider = StreamProvider.autoDispose
+    .family<Uint8List?, String>((ref, uid) {
+      final repository = ref.watch(socialRepositoryProvider);
+      return repository?.watchPhoto(uid) ?? Stream.value(null);
+    });
+
 final friendsProvider = StreamProvider<List<Friend>>((ref) {
   final repository = ref.watch(socialRepositoryProvider);
   return repository?.watchFriends() ?? Stream.value(const []);
@@ -69,16 +87,18 @@ final profileProvider = StreamProvider.autoDispose.family<Profile?, String>((
   return repository?.watchProfile(uid) ?? Stream.value(null);
 });
 
-final reviewsProvider = StreamProvider.autoDispose
-    .family<List<Review>, String>((ref, bookKey) {
-      final repository = ref.watch(socialRepositoryProvider);
-      return repository?.watchReviews(bookKey) ?? Stream.value(const []);
-    });
+final reviewsProvider = StreamProvider.autoDispose.family<List<Review>, String>(
+  (ref, bookKey) {
+    final repository = ref.watch(socialRepositoryProvider);
+    return repository?.watchReviews(bookKey) ?? Stream.value(const []);
+  },
+);
 
 /// Whether reading activity is shared with friends (on by default).
-final shareActivityProvider = StateNotifierProvider<ShareActivityNotifier, bool>(
-  (ref) => ShareActivityNotifier()..load(),
-);
+final shareActivityProvider =
+    StateNotifierProvider<ShareActivityNotifier, bool>(
+      (ref) => ShareActivityNotifier()..load(),
+    );
 
 class ShareActivityNotifier extends StateNotifier<bool> {
   ShareActivityNotifier() : super(true);
@@ -216,7 +236,6 @@ class SocialActivity {
     }
   }
 }
-
 
 /// Installed in main.dart so badge unlocks reach friends.
 List<BadgeUnlockListener> socialBadgeListeners(Ref ref) => [

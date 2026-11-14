@@ -121,7 +121,10 @@ class _ContentsList extends StatelessWidget {
           dense: true,
           selected: selected,
           selectedColor: theme.colorScheme.primary,
-          contentPadding: EdgeInsets.only(left: 20.0 + item.depth * 16, right: 20),
+          contentPadding: EdgeInsets.only(
+            left: 20.0 + item.depth * 16,
+            right: 20,
+          ),
           title: Text(
             item.label,
             style: TextStyle(
@@ -151,7 +154,8 @@ class _BookmarksList extends StatelessWidget {
     if (items.isEmpty) {
       return const _Empty(
         icon: Icons.bookmark_border,
-        text: 'No bookmarks yet. Tap the bookmark icon while reading to add one.',
+        text:
+            'No bookmarks yet. Tap the bookmark icon while reading to add one.',
       );
     }
     return ListView.separated(
