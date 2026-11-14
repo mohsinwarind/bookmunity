@@ -19,13 +19,110 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
+/*
+ * #page is the sheet of paper the reader sees (margins included). During a
+ * page turn it, or a frozen copy of it (.flip-sheet), rotates about the
+ * spine (left edge) while the other lies flat underneath.
+ */
+#page,
+.flip-sheet {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #f7f4ee;
+  transform-origin: 0 50%;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  will-change: transform;
+}
+
+#page {
+  z-index: 1;
+}
+
+.flip-sheet {
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.flip-clip {
+  position: absolute;
+  overflow: hidden;
+}
+
+.flip-clip > .epub-view {
+  position: absolute;
+  top: 0;
+}
+
+.flip-clip iframe {
+  border: 0;
+}
+
+/* Lighting on a turning page: darker toward the lifted edge, with a soft
+   glint where the paper curves. Opacity follows the turn angle. */
+.flip-shade {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  opacity: 0;
+  will-change: opacity;
+  z-index: 5;
+}
+
+.flip-shade.turning {
+  background: linear-gradient(to right,
+    rgba(0, 0, 0, 0.06) 0%,
+    rgba(0, 0, 0, 0.12) 45%,
+    rgba(255, 255, 255, 0.10) 72%,
+    rgba(0, 0, 0, 0.16) 88%,
+    rgba(0, 0, 0, 0.34) 100%);
+}
+
+.flip-shade.under {
+  background: rgba(0, 0, 0, 0.22);
+}
+
+/* Shadow the turning page casts on the page beneath, just past its edge. */
+#flip-cast {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 56px;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 2;
+  background: linear-gradient(to right, rgba(0, 0, 0, 0.32), rgba(0, 0, 0, 0));
+  will-change: transform, opacity;
+}
+
+/*
+ * Highlights are an SVG layer over the chapter iframe. epub.js passes
+ * mix-blend-mode as an SVG attribute, which browsers ignore, so without this
+ * the translucent fill sits on top of the text and washes it out. Blending
+ * the layer keeps text at full contrast under the colour.
+ */
+.epub-view > svg {
+  mix-blend-mode: multiply;
+}
+
+body.theme-dark .epub-view > svg {
+  mix-blend-mode: screen;
+}
+
 #viewer {
   position: absolute;
   top: 40px;
   bottom: 36px;
   left: 20px;
   right: 20px;
-  will-change: transform, opacity;
 }
 
 #viewer .epub-container {

@@ -84,8 +84,9 @@ class ReaderLocation {
   bool get bookmarked => bookmarkCfis.isNotEmpty;
 
   /// Pages left in the chapter, when the reader knows them.
-  int? get pagesLeftInChapter =>
-      totalPages > 0 && page > 0 ? (totalPages - page).clamp(0, totalPages) : null;
+  int? get pagesLeftInChapter => totalPages > 0 && page > 0
+      ? (totalPages - page).clamp(0, totalPages)
+      : null;
 
   /// True when the reader is on the last page, or effectively at 100%.
   bool get reachedEnd => atEnd || (percentage != null && percentage! >= 0.995);
@@ -181,12 +182,5 @@ abstract final class ReaderCommands {
     required List<String> bookmarks,
     required String? locations,
   }) =>
-      'window.startReader(${jsonEncode({
-        'url': url,
-        'cfi': (cfi?.isEmpty ?? true) ? null : cfi,
-        'settings': settings,
-        'highlights': highlights,
-        'bookmarks': bookmarks,
-        'locations': locations,
-      })});';
+      'window.startReader(${jsonEncode({'url': url, 'cfi': (cfi?.isEmpty ?? true) ? null : cfi, 'settings': settings, 'highlights': highlights, 'bookmarks': bookmarks, 'locations': locations})});';
 }

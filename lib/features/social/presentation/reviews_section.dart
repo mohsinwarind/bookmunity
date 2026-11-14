@@ -8,6 +8,8 @@ import '../../../design/formatters.dart';
 import '../data/social_models.dart';
 import '../data/social_providers.dart';
 import 'friends_screen.dart';
+import 'friend_profile_screen.dart';
+import 'user_avatar.dart';
 
 /// Ratings and reviews for a book, shared across Bookmunity readers by the
 /// book's identity key (ISBN or title|author).
@@ -39,13 +41,15 @@ class ReviewsSection extends ConsumerWidget {
             padding: EdgeInsets.all(16),
             child: Center(child: CircularProgressIndicator()),
           ),
-          error: (error, _) => Text(
-            socialErrorMessage(error),
-            style: theme.textTheme.bodySmall,
-          ),
+          error: (error, _) =>
+              Text(socialErrorMessage(error), style: theme.textTheme.bodySmall),
           data: (items) {
-            final mine = items.where((review) => review.uid == repository.uid).firstOrNull;
-            final others = items.where((review) => review.uid != repository.uid).toList();
+            final mine = items
+                .where((review) => review.uid == repository.uid)
+                .firstOrNull;
+            final others = items
+                .where((review) => review.uid != repository.uid)
+                .toList();
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -59,7 +63,9 @@ class ReviewsSection extends ConsumerWidget {
                         Icon(Icons.rate_review_outlined),
                         SizedBox(width: 12),
                         Expanded(
-                          child: Text('Choose a username to rate and review books.'),
+                          child: Text(
+                            'Choose a username to rate and review books.',
+                          ),
                         ),
                         Icon(Icons.chevron_right),
                       ],
@@ -136,7 +142,9 @@ class ReviewsSection extends ConsumerWidget {
         await ref.read(socialActivityProvider).reviewed(book, result.rating);
       }
     } catch (error) {
-      messenger.showSnackBar(SnackBar(content: Text(socialErrorMessage(error))));
+      messenger.showSnackBar(
+        SnackBar(content: Text(socialErrorMessage(error))),
+      );
     }
   }
 }
@@ -149,7 +157,8 @@ class _Average extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final average =
-        reviews.fold<int>(0, (sum, review) => sum + review.rating) / reviews.length;
+        reviews.fold<int>(0, (sum, review) => sum + review.rating) /
+        reviews.length;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -205,6 +214,18 @@ class _ReviewCard extends StatelessWidget {
         children: [
           Row(
             children: [
+              InkWell(
+                customBorder: const CircleBorder(),
+                onTap: mine
+                    ? null
+                    : () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => FriendProfileScreen(uid: review.uid),
+                        ),
+                      ),
+                child: UserAvatar(uid: review.uid, size: 34),
+              ),
+              const SizedBox(width: 10),
               Expanded(
                 child: Text(
                   mine ? 'Your review' : review.displayName,
@@ -298,7 +319,9 @@ class _ReviewEditorState extends State<_ReviewEditor> {
                   iconSize: 36,
                   onPressed: () => setState(() => _rating = i),
                   icon: Icon(
-                    i <= _rating ? Icons.star_rounded : Icons.star_outline_rounded,
+                    i <= _rating
+                        ? Icons.star_rounded
+                        : Icons.star_outline_rounded,
                     color: const Color(0xFFE0A526),
                   ),
                 ),
@@ -320,7 +343,9 @@ class _ReviewEditorState extends State<_ReviewEditor> {
             children: [
               if (widget.existing != null)
                 TextButton(
-                  style: TextButton.styleFrom(foregroundColor: BrutalColors.red),
+                  style: TextButton.styleFrom(
+                    foregroundColor: BrutalColors.red,
+                  ),
                   onPressed: () =>
                       Navigator.pop(context, const _ReviewDraft(delete: true)),
                   child: const Text('Delete'),

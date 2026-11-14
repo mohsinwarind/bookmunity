@@ -100,7 +100,9 @@ final achievementSummaryProvider = Provider<AsyncValue<AchievementSummary>>((
   final sessions = ref.watch(readingSessionsProvider);
   final highlights = ref.watch(highlightCountProvider);
   for (final value in [books, sessions, highlights]) {
-    if (value.hasError) return AsyncValue.error(value.error!, value.stackTrace!);
+    if (value.hasError) {
+      return AsyncValue.error(value.error!, value.stackTrace!);
+    }
   }
   if (!books.hasValue || !sessions.hasValue || !highlights.hasValue) {
     return const AsyncValue.loading();

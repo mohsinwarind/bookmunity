@@ -1,19 +1,27 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../controllers/auth_controller.dart';
+import '../design/brand_logo.dart';
 import '../design/brutal_theme.dart';
 import '../design/brutal_widgets.dart';
+import '../features/social/data/social_providers.dart';
+import '../features/social/data/social_repository.dart';
+import '../features/social/presentation/username_field.dart';
 
-class SignupPage extends StatefulWidget {
+class SignupPage extends ConsumerStatefulWidget {
   const SignupPage({super.key});
 
   @override
-  State<SignupPage> createState() => _SignupPageState();
+  ConsumerState<SignupPage> createState() => _SignupPageState();
 }
 
-class _SignupPageState extends State<SignupPage> {
+class _SignupPageState extends ConsumerState<SignupPage> {
   final formKey = GlobalKey<FormState>();
   final name = TextEditingController();
+  final username = TextEditingController();
+  final usernameChecker = UsernameChecker();
   final email = TextEditingController();
   final password = TextEditingController();
   final confirmation = TextEditingController();
@@ -24,6 +32,8 @@ class _SignupPageState extends State<SignupPage> {
   @override
   void dispose() {
     name.dispose();
+    username.dispose();
+    usernameChecker.dispose();
     email.dispose();
     password.dispose();
     confirmation.dispose();
@@ -33,19 +43,43 @@ class _SignupPageState extends State<SignupPage> {
   Future<void> submit() async {
     if (!formKey.currentState!.validate()) return;
     setState(() => loading = true);
+    final gate = ref.read(signupInProgressProvider.notifier);
     try {
-      await auth.signupUser(
+      // Check before creating the account so a taken name never leaves an
+      // account behind. Null means Firestore could not be reached: carry on,
+      // and the startup gate asks for the username again later.
+      if (await usernameChecker.checkNow(username.text) == false) return;
+      gate.state = true;
+      final user = await auth.signupUser(
         email: email.text,
         password: password.text,
         displayName: name.text,
       );
+      if (user != null) {
+        try {
+          await SocialRepository(
+            FirebaseFirestore.instance,
+            user.uid,
+          ).createProfile(
+            username: username.text,
+            displayName: name.text,
+            stats: ProfileStats.zero,
+          );
+        } catch (error) {
+          // Taken in the meantime, or offline: the gate shows the username
+          // screen so the user can pick again.
+          debugPrint('Profile not created at signup: $error');
+        }
+      }
       if (mounted) Navigator.pop(context);
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(_cleanError(error))));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(_cleanError(error))));
       }
     } finally {
+      gate.state = false;
       if (mounted) setState(() => loading = false);
     }
   }
@@ -56,9 +90,7 @@ class _SignupPageState extends State<SignupPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Create account'),
-      ),
+      appBar: AppBar(title: const Text('Create account')),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -70,6 +102,8 @@ class _SignupPageState extends State<SignupPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    const Center(child: BrandLogo(height: 110)),
+                    const SizedBox(height: 16),
                     BrutalCard(
                       backgroundColor: BrutalColors.pink,
                       child: Text(
@@ -87,6 +121,11 @@ class _SignupPageState extends State<SignupPage> {
                           value == null || value.trim().length < 2
                           ? 'Enter your name.'
                           : null,
+                    ),
+                    const SizedBox(height: 16),
+                    UsernameField(
+                      controller: username,
+                      checker: usernameChecker,
                     ),
                     const SizedBox(height: 16),
                     _field(

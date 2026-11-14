@@ -53,6 +53,9 @@
   window.addEventListener("error", function (e) {
     send("jsError", {message: String(e.message || e), source: String(e.filename || ""), line: e.lineno || 0});
   });
+  window.addEventListener("resize", function () {
+    if (typeof invalidateSnapshot === "function") invalidateSnapshot();
+  });
   window.addEventListener("unhandledrejection", function (e) {
     send("jsError", {message: String(e.reason && e.reason.message || e.reason)});
   });
@@ -84,6 +87,8 @@
     document.documentElement.style.background = t.bg;
     document.body.style.background = t.bg;
     document.body.style.color = t.fg;
+    document.body.className = "theme-" + settings.theme;
+    pageEl().style.background = t.bg;
     var v = viewer();
     v.style.top = INSET_TOP + "px";
     v.style.bottom = INSET_BOTTOM + "px";
@@ -279,6 +284,7 @@
       rendition.annotations.remove(item.cfiRange, "highlight");
     } catch (e) { /* not drawn yet */ }
     highlights[item.cfiRange] = item;
+    invalidateSnapshot();
     rendition.annotations.highlight(
       item.cfiRange,
       {id: item.id},
@@ -294,6 +300,7 @@
   function removeHighlight(cfiRange) {
     delete highlights[cfiRange];
     if (!rendition) return;
+    invalidateSnapshot();
     try {
       rendition.annotations.remove(cfiRange, "highlight");
     } catch (e) { /* already gone */ }
@@ -312,11 +319,13 @@
       } catch (e) { /* ignore */ }
     }
     searchMark = null;
+    invalidateSnapshot();
   }
 
   function markSearchResult(cfi) {
     clearSearchMark();
     searchMark = cfi;
+    invalidateSnapshot();
     rendition.annotations.highlight(cfi, {}, null, "bookmunity-search",
       {"fill": "#5B7DB1", "fill-opacity": "0.35", "mix-blend-mode": theme().blend});
   }
@@ -337,11 +346,501 @@
     selectionOpen = false;
   }
 
-  function setOffset(dx, animate) {
+  // ------------------------------------------------------------- page turn
+  //
+  // A paginated turn is drawn as a sheet of paper rotating about the spine
+  // (the left edge). epub.js only shows one page at a time, so a turn needs
+  // two pictures at once: the live #page and a frozen copy of it
+  // (.flip-sheet) built from a clone of the chapter document. The copy holds
+  // the whole chapter, so it is built once per chapter (ahead of time, after
+  // each relocation) and re-aimed at any page of it by shifting it.
+  //
+  //   Forward:  the copy of the old page lies on top and lifts away toward the
+  //             reader, revealing the live page, which has already moved on.
+  //   Backward: the live page moves back, starts edge-on at the spine and
+  //             folds down over the copy of the old page.
+  //
+  // Only transforms and opacity change per frame, so the compositor does the
+  // work. Anything that fails falls back to a plain fade, never a stuck page.
+
+  var PERSPECTIVE = 1800;
+  var COMMIT_RATIO = 0.35;
+  var FLING_MS = 320;
+  var reduceMotion = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  var snap = null;
+  var snapVersion = 0;
+  var snapTimer = null;
+  var flip = null;
+
+  function pageEl() {
+    return document.getElementById("page");
+  }
+
+  function pageShade() {
+    return document.getElementById("page-shade");
+  }
+
+  function castEl() {
+    return document.getElementById("flip-cast");
+  }
+
+  function nextFrame() {
+    return new Promise(function (resolve) {
+      requestAnimationFrame(function () {
+        requestAnimationFrame(resolve);
+      });
+    });
+  }
+
+  function delay(ms) {
+    return new Promise(function (resolve) {
+      setTimeout(resolve, ms);
+    });
+  }
+
+  function atEdge(direction) {
+    return !!(lastLocation && (direction > 0 ? lastLocation.atEnd : lastLocation.atStart));
+  }
+
+  // A turn that leaves the chapter replaces the chapter iframe, which would
+  // orphan the touch that is dragging the page, so those turns are animated
+  // after the finger lifts instead of following it.
+  function crossesChapter(direction) {
+    var pages = lastLocation && lastLocation.start ? pageInfo(lastLocation.start) : null;
+    if (!pages || !pages.total) return true;
+    return direction > 0 ? pages.page >= pages.total : pages.page <= 1;
+  }
+
+  function currentView() {
+    try {
+      var manager = rendition && rendition.manager;
+      return manager && manager.views && manager.views.first ? manager.views.first() : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function locationStamp() {
+    var view = currentView();
+    var container = rendition && rendition.manager && rendition.manager.container;
+    return (view && view.section ? view.section.index : -1) + ":" +
+      (container ? Math.round(container.scrollLeft) : 0);
+  }
+
+  function moveBy(direction) {
+    var before = locationStamp();
+    var move;
+    try {
+      move = direction > 0 ? rendition.next() : rendition.prev();
+    } catch (e) {
+      move = null;
+    }
+    return Promise.resolve(move).catch(function () {}).then(function () {
+      return locationStamp() !== before;
+    });
+  }
+
+  // ---- frozen copy of the chapter
+
+  function snapshotKey(view) {
+    if (!view || !view.element || !view.section) return null;
     var v = viewer();
-    v.style.transition = animate ? "transform 160ms ease-out, opacity 160ms ease-out" : "none";
-    v.style.transform = dx ? "translateX(" + dx + "px)" : "";
-    v.style.opacity = dx ? String(Math.max(0.55, 1 - Math.abs(dx) / 500)) : "1";
+    return [view.section.index, view.element.offsetWidth, view.element.offsetHeight,
+      v.clientWidth, v.clientHeight, snapVersion].join("|");
+  }
+
+  function serializeDocument(doc) {
+    var root = doc.documentElement.cloneNode(true);
+    var head = root.querySelector("head");
+    // Rules added through the CSSOM (insertRule) are not in the markup.
+    var rules = [];
+    Array.prototype.forEach.call(doc.styleSheets || [], function (sheet) {
+      try {
+        var owner = sheet.ownerNode;
+        if (owner && String(owner.tagName).toLowerCase() === "style" && !String(owner.textContent || "").trim()) {
+          Array.prototype.forEach.call(sheet.cssRules, function (rule) {
+            rules.push(rule.cssText);
+          });
+        }
+      } catch (e) { /* cross-origin sheet: already in the markup as a link */ }
+    });
+    Array.prototype.forEach.call(root.querySelectorAll("script"), function (node) {
+      node.parentNode.removeChild(node);
+    });
+    if (head) {
+      if (rules.length) {
+        var style = doc.createElement("style");
+        style.textContent = rules.join("\n");
+        head.appendChild(style);
+      }
+      if (!head.querySelector("base") && /^https?:/.test(doc.baseURI || "")) {
+        var base = doc.createElement("base");
+        base.setAttribute("href", doc.baseURI);
+        head.insertBefore(base, head.firstChild);
+      }
+    }
+    if (/xml/.test(doc.contentType || "")) {
+      return {type: "application/xhtml+xml", text: new XMLSerializer().serializeToString(root)};
+    }
+    return {type: "text/html", text: "<!DOCTYPE html>\n" + root.outerHTML};
+  }
+
+  function buildSnapshot(view) {
+    var key = snapshotKey(view);
+    var frame = view && (view.iframe || view.element.querySelector("iframe"));
+    var doc = frame && frame.contentDocument;
+    if (!key || !doc || !doc.documentElement) return null;
+    var payload;
+    try {
+      payload = serializeDocument(doc);
+    } catch (e) {
+      return null;
+    }
+    var sheet = document.createElement("div");
+    sheet.className = "flip-sheet";
+    sheet.setAttribute("aria-hidden", "true");
+    sheet.style.background = theme().bg;
+    var clip = document.createElement("div");
+    clip.className = "flip-clip";
+    // The view clone keeps epub.js's highlight layer (an SVG beside the
+    // iframe); only the iframe itself is swapped for a static copy.
+    var clone = view.element.cloneNode(true);
+    clone.removeAttribute("id");
+    clone.style.position = "absolute";
+    var copy = document.createElement("iframe");
+    copy.setAttribute("sandbox", "allow-same-origin");
+    copy.setAttribute("scrolling", "no");
+    copy.setAttribute("tabindex", "-1");
+    copy.style.cssText = frame.style.cssText;
+    copy.style.border = "0";
+    if (frame.getAttribute("width")) copy.setAttribute("width", frame.getAttribute("width"));
+    if (frame.getAttribute("height")) copy.setAttribute("height", frame.getAttribute("height"));
+    var old = clone.querySelector("iframe");
+    if (old) {
+      old.parentNode.replaceChild(copy, old);
+    } else {
+      clone.insertBefore(copy, clone.firstChild);
+    }
+    clip.appendChild(clone);
+    var shade = document.createElement("div");
+    shade.className = "flip-shade";
+    sheet.appendChild(clip);
+    sheet.appendChild(shade);
+    document.body.appendChild(sheet);
+
+    var url = URL.createObjectURL(new Blob([payload.text], {type: payload.type + ";charset=utf-8"}));
+    var entry = {key: key, el: sheet, clip: clip, view: clone, shade: shade, url: url, loaded: false};
+    entry.ready = new Promise(function (resolve) {
+      copy.addEventListener("load", function () {
+        nextFrame().then(function () {
+          entry.loaded = true;
+          resolve();
+        });
+      });
+    });
+    copy.src = url;
+    return entry;
+  }
+
+  function destroySnapshot() {
+    if (!snap) return;
+    try {
+      snap.el.parentNode.removeChild(snap.el);
+    } catch (e) { /* already gone */ }
+    try {
+      URL.revokeObjectURL(snap.url);
+    } catch (e) { /* ignore */ }
+    snap = null;
+  }
+
+  function ensureSnapshot() {
+    var view = currentView();
+    var key = snapshotKey(view);
+    if (!key) return null;
+    if (snap && snap.key === key) return snap;
+    destroySnapshot();
+    snap = buildSnapshot(view);
+    return snap;
+  }
+
+  // Highlights, search marks, settings and size all change what a page looks
+  // like, so any of them retires the copy.
+  function invalidateSnapshot() {
+    snapVersion++;
+    if (!flip) destroySnapshot();
+    scheduleSnapshot();
+  }
+
+  function scheduleSnapshot() {
+    clearTimeout(snapTimer);
+    if (reduceMotion || isScrolled()) return;
+    snapTimer = setTimeout(function () {
+      if (!flip && !turning && rendition && !isScrolled()) ensureSnapshot();
+    }, 500);
+  }
+
+  // Shift the chapter copy so it shows exactly the page on screen.
+  function aimSnapshot(entry) {
+    var container = rendition.manager.container;
+    var view = currentView();
+    // Rects, not offsets: they already account for the container's scroll.
+    var pageRect = pageEl().getBoundingClientRect();
+    var clipRect = container.getBoundingClientRect();
+    var viewRect = view.element.getBoundingClientRect();
+    entry.clip.style.left = (clipRect.left - pageRect.left) + "px";
+    entry.clip.style.top = (clipRect.top - pageRect.top) + "px";
+    entry.clip.style.width = container.clientWidth + "px";
+    entry.clip.style.height = container.clientHeight + "px";
+    entry.view.style.left = (viewRect.left - clipRect.left) + "px";
+    entry.view.style.top = (viewRect.top - clipRect.top) + "px";
+    entry.el.style.background = theme().bg;
+  }
+
+  // ---- drawing
+
+  function setLayer(element, z) {
+    element.style.zIndex = String(z);
+  }
+
+  // Horizontal position of the lifted edge on screen, after perspective.
+  function projectedEdge(theta, width) {
+    return width * Math.cos(theta) * PERSPECTIVE / (PERSPECTIVE - width * Math.sin(theta));
+  }
+
+  // x: where the free edge would be without perspective, 0 (at the spine)
+  // to the screen width (lying flat).
+  function renderFlip(f, x) {
+    var width = Math.max(1, window.innerWidth);
+    f.x = x;
+    var cover = Math.max(0, Math.min(1, x / width));
+    var theta = Math.acos(cover);
+    var lift = Math.sin(theta);
+    f.turner.style.transform = "perspective(" + PERSPECTIVE + "px) rotateY(" + (-theta * 180 / Math.PI).toFixed(3) + "deg)";
+    f.turnShade.style.opacity = String(Math.min(1, lift * 1.2));
+    f.underShade.style.opacity = String(0.55 * cover * Math.min(1, lift * 3));
+    var cast = castEl();
+    cast.style.transform = "translateX(" + projectedEdge(theta, width).toFixed(1) + "px)";
+    cast.style.opacity = String(Math.min(1, lift * 3) * Math.min(1, cover * 4));
+  }
+
+  function setupLayers(f) {
+    var page = pageEl();
+    var entry = f.sheet;
+    page.style.transition = "none";
+    page.style.opacity = "1";
+    if (f.dir > 0) {
+      f.turner = entry.el;
+      f.turnShade = entry.shade;
+      f.under = page;
+      f.underShade = pageShade();
+      page.style.transform = "";
+      setLayer(page, 1);
+      setLayer(entry.el, 3);
+    } else {
+      f.turner = page;
+      f.turnShade = pageShade();
+      f.under = entry.el;
+      f.underShade = entry.shade;
+      page.style.transform = "perspective(" + PERSPECTIVE + "px) rotateY(-90deg)";
+      setLayer(entry.el, 1);
+      setLayer(page, 3);
+    }
+    f.turnShade.className = "flip-shade turning";
+    f.underShade.className = "flip-shade under";
+  }
+
+  function easeOutCubic(t) {
+    return 1 - Math.pow(1 - t, 3);
+  }
+
+  function easeInOutSine(t) {
+    return -(Math.cos(Math.PI * t) - 1) / 2;
+  }
+
+  function animateFlip(f, target, duration, ease) {
+    var from = f.x;
+    var begin = null;
+    return new Promise(function (resolve) {
+      function frame(now) {
+        if (f.dead) return resolve();
+        if (begin === null) begin = now;
+        var t = Math.min(1, (now - begin) / duration);
+        renderFlip(f, from + (target - from) * ease(t));
+        if (t < 1) {
+          requestAnimationFrame(frame);
+        } else {
+          resolve();
+        }
+      }
+      requestAnimationFrame(frame);
+    });
+  }
+
+  // ---- lifecycle
+
+  function beginFlip(direction, interactive) {
+    var f = {
+      dir: direction,
+      interactive: interactive,
+      x: direction > 0 ? window.innerWidth : 0,
+      ready: false,
+      release: null,
+      dead: false,
+      fallback: false,
+      sheet: null
+    };
+    flip = f;
+    turning = true;
+    // A held drag may last as long as the reader likes; only an automatic
+    // turn is on the clock until it is released.
+    if (!interactive) armWatchdog(f, 8000);
+    var entry = ensureSnapshot();
+    if (!entry) {
+      abortFlip(f);
+      return f;
+    }
+    Promise.race([entry.ready, delay(interactive ? 450 : 700)]).then(function () {
+      if (f.dead) return;
+      if (!entry.loaded || snap !== entry) {
+        abortFlip(f);
+        return;
+      }
+      f.sheet = entry;
+      aimSnapshot(entry);
+      entry.el.style.transform = "";
+      entry.shade.style.opacity = "0";
+      // The copy now covers the live page pixel for pixel, so the live page
+      // can move on underneath unseen.
+      setLayer(entry.el, 3);
+      return nextFrame().then(function () {
+        if (f.dead) return false;
+        return moveBy(direction);
+      }).then(function (moved) {
+        if (f.dead) return;
+        if (!moved) {
+          endFlip(f);
+          send("edgeReached", {end: direction > 0});
+          return;
+        }
+        setupLayers(f);
+        f.ready = true;
+        renderFlip(f, f.x);
+        if (f.release !== null) settleFlip(f);
+      });
+    }).catch(function () {
+      if (!f.dead) endFlip(f);
+    });
+    return f;
+  }
+
+  function dragFlip(f, dx) {
+    if (!f || f.dead) return;
+    var width = window.innerWidth;
+    var x = f.dir > 0 ? width + dx : dx;
+    f.x = Math.max(0, Math.min(width, x));
+    if (f.ready) renderFlip(f, f.x);
+  }
+
+  function armWatchdog(f, ms) {
+    clearTimeout(f.watchdog);
+    f.watchdog = setTimeout(function () {
+      endFlip(f);
+    }, ms);
+  }
+
+  function releaseFlip(f, commit) {
+    if (!f || f.release !== null) return;
+    f.release = commit;
+    if (!f.dead && f.interactive) armWatchdog(f, 4000);
+    if (f.fallback) {
+      if (commit) simpleTurn(f.dir);
+      return;
+    }
+    if (f.ready && !f.dead) settleFlip(f);
+  }
+
+  function settleFlip(f) {
+    var width = window.innerWidth;
+    var commit = f.release;
+    // Forward commits fold the page to the spine; backward commits lay it flat.
+    var target = (f.dir > 0) === commit ? 0 : width;
+    var distance = Math.abs(target - f.x) / Math.max(1, width);
+    var duration = f.interactive ? Math.max(140, 360 * distance) : 520;
+    animateFlip(f, target, duration, f.interactive ? easeOutCubic : easeInOutSine).then(function () {
+      if (f.dead) return;
+      // A cancelled turn steps the live page back while it is hidden: under
+      // the flat copy (forward) or edge-on at the spine (backward).
+      return (commit ? Promise.resolve() : moveBy(-f.dir)).then(nextFrame);
+    }).then(function () {
+      endFlip(f);
+    });
+  }
+
+  function resetFlipLayers() {
+    var page = pageEl();
+    page.style.transition = "none";
+    page.style.transform = "";
+    page.style.opacity = "1";
+    setLayer(page, 1);
+    var shade = pageShade();
+    shade.className = "flip-shade";
+    shade.style.opacity = "0";
+    castEl().style.opacity = "0";
+  }
+
+  function endFlip(f) {
+    if (f.dead) return;
+    f.dead = true;
+    clearTimeout(f.watchdog);
+    resetFlipLayers();
+    if (f.sheet) {
+      f.sheet.el.style.transform = "";
+      f.sheet.shade.style.opacity = "0";
+      f.sheet.shade.className = "flip-shade";
+      setLayer(f.sheet.el, 0);
+    }
+    if (flip === f) flip = null;
+    turning = false;
+    if (snap && snap.key !== snapshotKey(currentView())) destroySnapshot();
+    scheduleSnapshot();
+  }
+
+  // No copy available in time: drop the 3D turn for this gesture.
+  function abortFlip(f) {
+    endFlip(f);
+    f.fallback = true;
+    if (f.release === true) simpleTurn(f.dir);
+  }
+
+  function simpleTurn(direction) {
+    if (!rendition || turning) return;
+    turning = true;
+    destroySnapshot();
+    var page = pageEl();
+    page.style.transform = "";
+    page.style.transition = "opacity 120ms ease-in";
+    page.style.opacity = "0.15";
+    setTimeout(function () {
+      moveBy(direction).then(function (moved) {
+        page.style.transition = "opacity 160ms ease-out";
+        page.style.opacity = "1";
+        setTimeout(function () {
+          page.style.transition = "none";
+          turning = false;
+        }, 170);
+        if (!moved) send("edgeReached", {end: direction > 0});
+      });
+    }, 120);
+  }
+
+  // Rubber-band drag for swipes that cannot follow the finger.
+  function setOffset(dx, animate) {
+    var page = pageEl();
+    // Opacity stays at 1: the chapter copy waits underneath #page and would
+    // show through.
+    page.style.transition = animate ? "transform 160ms ease-out" : "none";
+    page.style.transform = dx ? "translateX(" + dx + "px)" : "";
+    page.style.opacity = "1";
   }
 
   function turn(direction) {
@@ -350,74 +849,98 @@
       goToChapter(direction);
       return;
     }
-    if (lastLocation && ((direction > 0 && lastLocation.atEnd) || (direction < 0 && lastLocation.atStart))) {
+    if (atEdge(direction)) {
       setOffset(0, true);
       send("edgeReached", {end: direction > 0});
       return;
     }
-    turning = true;
-    var v = viewer();
-    var out = direction > 0 ? -1 : 1;
-    v.style.transition = "transform 130ms ease-in, opacity 130ms ease-in";
-    v.style.transform = "translateX(" + (out * 48) + "px)";
-    v.style.opacity = "0.2";
-    setTimeout(function () {
-      var move = direction > 0 ? rendition.next() : rendition.prev();
-      Promise.resolve(move).catch(function () {}).then(function () {
-        v.style.transition = "none";
-        v.style.transform = "translateX(" + (-out * 48) + "px)";
-        void v.offsetWidth;
-        v.style.transition = "transform 170ms ease-out, opacity 170ms ease-out";
-        v.style.transform = "";
-        v.style.opacity = "1";
-        setTimeout(function () {
-          turning = false;
-        }, 180);
-      });
-    }, 130);
+    if (reduceMotion) {
+      simpleTurn(direction);
+      return;
+    }
+    releaseFlip(beginFlip(direction, false), true);
   }
 
   function goToChapter(direction) {
-    if (!rendition || !lastLocation || !lastLocation.start) return;
+    if (!rendition || turning || !lastLocation || !lastLocation.start) return;
     var target = book.spine.get((lastLocation.start.index || 0) + direction);
     if (!target) {
       send("edgeReached", {end: direction > 0});
       return;
     }
-    var v = viewer();
-    v.style.transition = "opacity 140ms ease-in";
-    v.style.opacity = "0";
+    destroySnapshot();
+    var page = pageEl();
+    page.style.transition = "opacity 140ms ease-in";
+    page.style.opacity = "0";
     setTimeout(function () {
       Promise.resolve(rendition.display(target.href)).catch(function () {}).then(function () {
-        v.style.transition = "opacity 180ms ease-out";
-        v.style.opacity = "1";
+        page.style.transition = "opacity 180ms ease-out";
+        page.style.opacity = "1";
       });
     }, 140);
   }
+
+  // ---------------------------------------------------------------- gestures
+  //
+  // Distances use screen coordinates: during a backward turn the iframe's own
+  // page is rotated, which would distort its client coordinates.
 
   function attachGestures(contents) {
     var doc = contents.document;
     var win = contents.window;
     var start = null;
 
+    function abandon() {
+      var s = start;
+      start = null;
+      if (!s) return;
+      if (s.mode === "flip") releaseFlip(s.flip, false);
+      else if (s.mode) setOffset(0, true);
+    }
+
     doc.addEventListener("touchstart", function (e) {
       activity();
       if (e.touches.length !== 1) {
-        start = null;
+        abandon();
         return;
       }
       var t = e.touches[0];
-      start = {x: t.clientX, y: t.clientY, time: Date.now(), hadSelection: hasSelection(win) || selectionOpen, moved: false};
+      start = {
+        x: t.screenX,
+        y: t.screenY,
+        time: Date.now(),
+        hadSelection: hasSelection(win) || selectionOpen,
+        moved: false,
+        mode: null,
+        dir: 0,
+        flip: null
+      };
     }, {passive: true});
 
     doc.addEventListener("touchmove", function (e) {
       if (!start || e.touches.length !== 1) return;
       var t = e.touches[0];
-      var dx = t.clientX - start.x;
-      var dy = t.clientY - start.y;
+      var dx = t.screenX - start.x;
+      var dy = t.screenY - start.y;
       if (Math.abs(dx) > 10 || Math.abs(dy) > 10) start.moved = true;
-      if (!isScrolled() && !start.hadSelection && !turning && Math.abs(dx) > Math.abs(dy) && !hasSelection(win)) {
-        setOffset(dx * 0.35, false);
+      if (!start.mode) {
+        if (isScrolled() || start.hadSelection || hasSelection(win) || turning) return;
+        if (Math.abs(dx) < 12 || Math.abs(dx) < Math.abs(dy) * 1.2) return;
+        start.dir = dx < 0 ? 1 : -1;
+        if (atEdge(start.dir)) {
+          start.mode = "edge";
+        } else if (reduceMotion || crossesChapter(start.dir)) {
+          start.mode = "slide";
+        } else {
+          start.mode = "flip";
+          start.flip = beginFlip(start.dir, true);
+        }
+      }
+      if (start.mode === "flip") {
+        if (start.flip.fallback) setOffset(dx * 0.3, false);
+        else dragFlip(start.flip, dx);
+      } else {
+        setOffset(dx * (start.mode === "edge" ? 0.18 : 0.35), false);
       }
     }, {passive: true});
 
@@ -426,11 +949,30 @@
       var s = start;
       start = null;
       var t = e.changedTouches[0];
-      var dx = t.clientX - s.x;
-      var dy = t.clientY - s.y;
+      var dx = t.screenX - s.x;
+      var dy = t.screenY - s.y;
       var elapsed = Date.now() - s.time;
-      if (s.hadSelection || hasSelection(win)) {
+      var travelled = s.dir > 0 ? -dx : dx;
+      var swiped = travelled > SWIPE_DISTANCE;
+
+      if (s.mode === "flip") {
+        if (s.flip.fallback) setOffset(0, false);
+        var commit = travelled > window.innerWidth * COMMIT_RATIO || (swiped && elapsed < FLING_MS);
+        releaseFlip(s.flip, commit);
+        return;
+      }
+      if (s.mode === "edge") {
         setOffset(0, true);
+        if (swiped) send("edgeReached", {end: s.dir > 0});
+        return;
+      }
+      if (s.mode === "slide") {
+        setOffset(0, false);
+        if (swiped) turn(s.dir);
+        return;
+      }
+
+      if (s.hadSelection || hasSelection(win)) {
         if (s.hadSelection && !s.moved && elapsed < TAP_MAX_MS) {
           // Tapping away from an open selection dismisses it, like Kindle.
           setTimeout(function () {
@@ -442,14 +984,15 @@
         }
         return;
       }
-      var horizontal = Math.abs(dx) > Math.abs(dy) * (isScrolled() ? 2 : 1.2);
-      if (Math.abs(dx) > SWIPE_DISTANCE && horizontal && elapsed < 900) {
+      // Scrolled mode: a clear horizontal swipe changes chapter.
+      if (isScrolled() && Math.abs(dx) > SWIPE_DISTANCE && Math.abs(dx) > Math.abs(dy) * 2 && elapsed < 900) {
         turn(dx < 0 ? 1 : -1);
         return;
       }
-      if (!isScrolled()) setOffset(0, true);
       if (!s.moved && elapsed < TAP_MAX_MS) handleTap(t, win, e.target);
     }, {passive: true});
+
+    doc.addEventListener("touchcancel", abandon, {passive: true});
 
     doc.addEventListener("selectionchange", function () {
       if (selectionOpen && !hasSelection(win)) {
@@ -566,6 +1109,7 @@
       lastLocation = location;
       activity();
       report();
+      scheduleSnapshot();
     });
     rendition.on("selected", onSelected);
     rendition.themes.fontSize(settings.fontSize + "px");
@@ -588,6 +1132,7 @@
       } catch (e) { /* ignore */ }
     }
     viewer().innerHTML = "";
+    invalidateSnapshot();
     return createRendition(target);
   }
 
@@ -595,6 +1140,7 @@
     var previous = settings;
     settings = Object.assign({}, settings, next || {});
     if (!rendition) return;
+    invalidateSnapshot();
     var keep = currentCfi();
     if (previous.flow !== settings.flow) {
       clearSearchMark();

@@ -41,7 +41,9 @@ class _DesignGalleryState extends State<DesignGallery> {
                 style: Theme.of(context).textTheme.headlineLarge,
               ),
               const SizedBox(height: 8),
-              const Text('Calm neo-brutalism: outlines, soft offsets, muted colour.'),
+              const Text(
+                'Calm neo-brutalism: outlines, soft offsets, muted colour.',
+              ),
               const SizedBox(height: 24),
               BrutalCard(
                 backgroundColor: BrutalColors.yellow,

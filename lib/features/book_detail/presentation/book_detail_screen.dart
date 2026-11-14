@@ -96,7 +96,9 @@ class BookDetailScreen extends ConsumerWidget {
           const SizedBox(height: 20),
           BrutalCard(
             onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => HighlightsScreen(book: current)),
+              MaterialPageRoute(
+                builder: (_) => HighlightsScreen(book: current),
+              ),
             ),
             child: const Row(
               children: [
@@ -119,7 +121,10 @@ class BookDetailScreen extends ConsumerWidget {
                 : '${current.progressPercent.floor()}%',
           ),
           if (current.lastOpenedAt != null)
-            _InfoRow(label: 'Last read', value: formatDate(current.lastOpenedAt!)),
+            _InfoRow(
+              label: 'Last read',
+              value: formatDate(current.lastOpenedAt!),
+            ),
           _InfoRow(label: 'Added', value: formatDate(current.addedAt)),
           const SizedBox(height: 24),
           ReviewsSection(book: current),
@@ -165,7 +170,11 @@ class BookDetailScreen extends ConsumerWidget {
     }
   }
 
-  Future<void> _delete(BuildContext context, WidgetRef ref, Book current) async {
+  Future<void> _delete(
+    BuildContext context,
+    WidgetRef ref,
+    Book current,
+  ) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(

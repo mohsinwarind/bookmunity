@@ -60,10 +60,7 @@ class _BrutalPressableState extends State<BrutalPressable> {
           decoration: BoxDecoration(
             color: background,
             borderRadius: widget.borderRadius,
-            border: Border.all(
-              color: outline,
-              width: BrutalTokens.borderWidth,
-            ),
+            border: Border.all(color: outline, width: BrutalTokens.borderWidth),
             boxShadow: offset == 0 && isEnabled
                 ? [
                     BoxShadow(

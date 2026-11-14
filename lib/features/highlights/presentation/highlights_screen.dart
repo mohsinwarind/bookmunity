@@ -166,7 +166,10 @@ class _HighlightCard extends StatelessWidget {
                           quote: highlight.selectedText,
                         );
                         if (note != null) {
-                          await database.updateHighlightNote(highlight.id, note);
+                          await database.updateHighlightNote(
+                            highlight.id,
+                            note,
+                          );
                         }
                       },
                     ),

@@ -66,40 +66,88 @@ class SelectionToolbar extends StatelessWidget {
                 ),
               ),
             const Divider(height: 12),
+            // Two rows so the panel fits narrow (320dp) phones: colours plus
+            // close, then the actions, which wrap rather than overflow.
             Row(
               children: [
-                for (var index = 0; index < highlightSwatches.length; index++)
-                  _SwatchButton(
-                    color: highlightSwatches[index],
-                    label: 'Highlight ${highlightSwatchNames[index]}',
-                    onTap: () => onHighlight(index),
+                Expanded(
+                  child: Wrap(
+                    children: [
+                      for (
+                        var index = 0;
+                        index < highlightSwatches.length;
+                        index++
+                      )
+                        _SwatchButton(
+                          color: highlightSwatches[index],
+                          label: 'Highlight ${highlightSwatchNames[index]}',
+                          onTap: () => onHighlight(index),
+                        ),
+                    ],
                   ),
-                const Spacer(),
-                IconButton(
-                  tooltip: 'Add note',
-                  icon: const Icon(Icons.edit_note),
-                  onPressed: onNote,
-                ),
-                IconButton(
-                  tooltip: 'Copy',
-                  icon: const Icon(Icons.copy, size: 20),
-                  onPressed: onCopy,
-                ),
-                IconButton(
-                  tooltip: 'Search in book',
-                  icon: const Icon(Icons.search),
-                  onPressed: onSearch,
                 ),
                 IconButton(
                   tooltip: 'Close',
+                  visualDensity: VisualDensity.compact,
                   icon: const Icon(Icons.close),
                   onPressed: onClose,
                 ),
               ],
             ),
+            Wrap(
+              spacing: 2,
+              children: [
+                _ActionButton(
+                  icon: Icons.edit_note,
+                  label: 'Note',
+                  onPressed: onNote,
+                ),
+                _ActionButton(
+                  icon: Icons.copy,
+                  label: 'Copy',
+                  onPressed: onCopy,
+                ),
+                _ActionButton(
+                  icon: Icons.search,
+                  label: 'Search',
+                  onPressed: onSearch,
+                ),
+                if (word != null)
+                  _ActionButton(
+                    icon: Icons.menu_book_outlined,
+                    label: 'Define',
+                    onPressed: () => onDefine(word),
+                  ),
+              ],
+            ),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _ActionButton extends StatelessWidget {
+  const _ActionButton({
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextButton.icon(
+      style: TextButton.styleFrom(
+        visualDensity: VisualDensity.compact,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+      ),
+      icon: Icon(icon, size: 20),
+      label: Text(label),
+      onPressed: onPressed,
     );
   }
 }
@@ -168,9 +216,9 @@ Future<String?> showNoteDialog(
                 '“$quote”',
                 maxLines: 4,
                 overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  fontFamily: 'serif',
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(fontFamily: 'serif'),
               ),
             ),
           TextField(
@@ -248,17 +296,26 @@ Future<void> showHighlightSheet(
               const SizedBox(height: 8),
               Row(
                 children: [
-                  for (var index = 0; index < highlightSwatches.length; index++)
-                    _SwatchButton(
-                      color: highlightSwatches[index],
-                      label: highlightSwatchNames[index],
-                      selected: highlight.color == index,
-                      onTap: () {
-                        Navigator.pop(context);
-                        onColor(index);
-                      },
+                  Expanded(
+                    child: Wrap(
+                      children: [
+                        for (
+                          var index = 0;
+                          index < highlightSwatches.length;
+                          index++
+                        )
+                          _SwatchButton(
+                            color: highlightSwatches[index],
+                            label: highlightSwatchNames[index],
+                            selected: highlight.color == index,
+                            onTap: () {
+                              Navigator.pop(context);
+                              onColor(index);
+                            },
+                          ),
+                      ],
                     ),
-                  const Spacer(),
+                  ),
                   if (word != null)
                     IconButton(
                       tooltip: 'Define',

@@ -1,0 +1,13 @@
+{
+  "name": "bookmunity-seed",
+  "private": true,
+  "type": "module",
+  "description": "Seeds sample readers, friendships, activity and reviews into Firestore.",
+  "scripts": {
+    "seed": "node seed.mjs seed",
+    "accept": "node seed.mjs accept"
+  },
+  "dependencies": {
+    "firebase": "11.10.0"
+  }
+}

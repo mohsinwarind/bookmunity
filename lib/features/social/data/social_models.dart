@@ -30,6 +30,8 @@ class Profile {
     required this.currentStreak,
     required this.longestStreak,
     required this.badgeCount,
+    this.bio = '',
+    this.hasPhoto = false,
     this.createdAt,
   });
 
@@ -43,6 +45,8 @@ class Profile {
       currentStreak: _int(data['currentStreak']),
       longestStreak: _int(data['longestStreak']),
       badgeCount: _int(data['badgeCount']),
+      bio: _str(data['bio']),
+      hasPhoto: data['hasPhoto'] == true,
       createdAt: _time(data['createdAt']),
     );
   }
@@ -54,7 +58,31 @@ class Profile {
   final int currentStreak;
   final int longestStreak;
   final int badgeCount;
+
+  /// Short public "about me", at most [maxBioLength] characters.
+  final String bio;
+
+  /// Whether the user uploaded a photo (stored in `avatars/{uid}`). When
+  /// false the generated cute avatar is shown instead.
+  final bool hasPhoto;
   final DateTime? createdAt;
+
+  static const maxBioLength = 160;
+}
+
+/// Where the signed-in user's profile stands, as far as the server knows.
+enum ProfileStatus {
+  /// Still waiting for the server.
+  loading,
+
+  /// The profile exists.
+  ready,
+
+  /// The server confirmed there is no profile: ask for a username.
+  missing,
+
+  /// Firestore cannot be reached or is not set up; let the user in anyway.
+  unavailable,
 }
 
 class FriendRequest {
@@ -210,3 +238,4 @@ String _clip(String value, int max) =>
 /// Truncates free text to the limits enforced by firestore.rules.
 String clipTitle(String value) => _clip(value, 200);
 String clipDisplayName(String value) => _clip(value.trim(), 50);
+String clipBio(String value) => _clip(value.trim(), Profile.maxBioLength);
