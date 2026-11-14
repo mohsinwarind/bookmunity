@@ -1,41 +1,43 @@
-html,
-body,
-#viewer {
-  margin: 0;
-  width: 100%;
-  min-height: 100%;
-  background: #f4f0e6;
-  color: #0a0a0a;
-}
-
+/*
+ * The page itself never scrolls. epub.js owns scrolling inside #viewer:
+ * paginated mode moves between CSS columns, scrolled mode uses its own
+ * overflow container. Nesting scroll containers here is what previously
+ * clipped chapters to one screen.
+ */
 html,
 body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
   height: 100%;
-  overflow-y: auto;
+  overflow: hidden;
+  overscroll-behavior: none;
+  background: #f7f4ee;
+  color: #2b2b2b;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 #viewer {
-  min-height: 100vh;
-  height: 100%;
-  padding: 28px;
-  box-sizing: border-box;
-  overflow-y: auto;
-  overflow-x: hidden;
+  position: absolute;
+  top: 40px;
+  bottom: 36px;
+  left: 20px;
+  right: 20px;
+  will-change: transform, opacity;
+}
+
+#viewer .epub-container {
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+#viewer .epub-container::-webkit-scrollbar {
+  display: none;
 }
 
 #viewer iframe {
-  width: 100% !important;
-  height: 100% !important;
   border: 0;
-  display: block;
-}
-
-body.dark {
-  background: #0a0a0a;
-  color: #f4f0e6;
-}
-
-body.sepia {
-  background: #e8d9b5;
-  color: #3b2a1a;
 }

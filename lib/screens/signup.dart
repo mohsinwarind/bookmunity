@@ -51,17 +51,13 @@ class _SignupPageState extends State<SignupPage> {
   }
 
   String _cleanError(Object error) =>
-      error.toString().replaceFirst('Exception: ', '').toUpperCase();
+      error.toString().replaceFirst('Exception: ', '');
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        leading: IconButton(
-          onPressed: () => Navigator.pop(context),
-          icon: const Text('<-'),
-        ),
-        title: const Text('CREATE ACCOUNT'),
+        title: const Text('Create account'),
       ),
       body: SafeArea(
         child: Center(
@@ -77,53 +73,58 @@ class _SignupPageState extends State<SignupPage> {
                     BrutalCard(
                       backgroundColor: BrutalColors.pink,
                       child: Text(
-                        'JOIN THE COMMUNITY.',
-                        style: Theme.of(context).textTheme.headlineSmall,
+                        'Join the community',
+                        style: Theme.of(context).textTheme.headlineSmall
+                            ?.copyWith(color: BrutalColors.ink),
                       ),
                     ),
                     const SizedBox(height: 24),
                     _field(
                       controller: name,
-                      label: 'DISPLAY NAME',
-                      hint: 'YOUR NAME',
+                      label: 'Display name',
+                      hint: 'Your name',
                       validator: (value) =>
                           value == null || value.trim().length < 2
-                          ? 'ENTER YOUR NAME.'
+                          ? 'Enter your name.'
                           : null,
                     ),
                     const SizedBox(height: 16),
                     _field(
                       controller: email,
-                      label: 'EMAIL',
-                      hint: 'YOU@EXAMPLE.COM',
+                      label: 'Email',
+                      hint: 'you@example.com',
                       validator: (value) =>
                           value == null || !value.contains('@')
-                          ? 'ENTER A VALID EMAIL.'
+                          ? 'Enter a valid email.'
                           : null,
                     ),
                     const SizedBox(height: 16),
                     _field(
                       controller: password,
-                      label: 'PASSWORD',
-                      hint: 'MINIMUM 6 CHARACTERS',
+                      label: 'Password',
+                      hint: 'At least 6 characters',
                       obscureText: obscure,
-                      suffix: BrutalPressable(
+                      suffix: IconButton(
+                        tooltip: obscure ? 'Show password' : 'Hide password',
                         onPressed: () => setState(() => obscure = !obscure),
-                        padding: const EdgeInsets.all(10),
-                        child: Text(obscure ? 'SHOW' : 'HIDE'),
+                        icon: Icon(
+                          obscure
+                              ? Icons.visibility_outlined
+                              : Icons.visibility_off_outlined,
+                        ),
                       ),
                       validator: (value) => value == null || value.length < 6
-                          ? 'PASSWORD IS TOO SHORT.'
+                          ? 'Password is too short.'
                           : null,
                     ),
                     const SizedBox(height: 16),
                     _field(
                       controller: confirmation,
-                      label: 'CONFIRM PASSWORD',
-                      hint: 'REPEAT PASSWORD',
+                      label: 'Confirm password',
+                      hint: 'Repeat password',
                       obscureText: true,
                       validator: (value) => value != password.text
-                          ? 'PASSWORDS DO NOT MATCH.'
+                          ? 'Passwords do not match.'
                           : null,
                     ),
                     const SizedBox(height: 24),
@@ -134,7 +135,7 @@ class _SignupPageState extends State<SignupPage> {
                         backgroundColor: BrutalColors.green,
                         child: Center(
                           child: Text(
-                            loading ? 'CREATING...' : 'CREATE ACCOUNT ->',
+                            loading ? 'Creating account…' : 'Create account',
                           ),
                         ),
                       ),

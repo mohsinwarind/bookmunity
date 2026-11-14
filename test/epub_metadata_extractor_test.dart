@@ -87,6 +87,44 @@ void main() {
     expect(metadata.title, 'First Heading');
     expect(metadata.author, 'UNKNOWN AUTHOR');
     expect(metadata.bookKey, 'first-heading|unknown-author');
+    expect(metadata.genre, isNull);
+  });
+
+  test('derives a normalised genre from hierarchical subjects', () {
+    final archive = _epub(
+      opfPath: 'content.opf',
+      opf: '''
+        <package xmlns="http://www.idpf.org/2007/opf">
+          <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+            <dc:title>Genre Book</dc:title>
+            <dc:subject>FICTION -- fantasy fiction</dc:subject>
+            <dc:subject>Adventure</dc:subject>
+          </metadata>
+          <manifest/>
+          <spine/>
+        </package>
+      ''',
+    );
+
+    expect(extractor.extract(archive).genre, 'Fantasy Fiction');
+  });
+
+  test('skips generic subject facets', () {
+    final archive = _epub(
+      opfPath: 'content.opf',
+      opf: '''
+        <package xmlns="http://www.idpf.org/2007/opf">
+          <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+            <dc:title>Plain</dc:title>
+            <dc:subject>Science fiction -- Fiction</dc:subject>
+          </metadata>
+          <manifest/>
+          <spine/>
+        </package>
+      ''',
+    );
+
+    expect(extractor.extract(archive).genre, 'Science Fiction');
   });
 }
 

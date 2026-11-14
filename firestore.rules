@@ -1,0 +1,304 @@
+rules_version = '2';
+
+// ===============================================================
+// Assumed Data Model (Cloud Firestore, Standard edition, (default) db)
+// ===============================================================
+//
+// Collection: profiles            Document ID: {uid}
+//   Public profile, readable by any signed-in user. Holds NO email or
+//   other private data (the email lives only in Firebase Auth).
+//   - uid: string (required, == document ID, immutable)
+//   - username: string (required, 3-20 chars [A-Za-z0-9_], immutable)
+//   - usernameLower: string (required, == username.lower(), immutable)
+//   - displayName: string (required, 1-50 chars)
+//   - booksFinished: int (required, 0..100000)
+//   - currentStreak: int (required, 0..100000)
+//   - longestStreak: int (required, 0..100000)
+//   - badgeCount: int (required, 0..100)
+//   - createdAt: timestamp (required, == request.time on create, immutable)
+//   - updatedAt: timestamp (required, == request.time on every write)
+//
+// Collection: usernames           Document ID: {usernameLower}
+//   Uniqueness index for usernames, claimed in the same batch as the
+//   profile. Never updated or deleted by clients.
+//   - uid: string (required, == request.auth.uid)
+//
+// Collection: friendRequests      Document ID: {fromUid}_{toUid}
+//   Pending request; deleted when accepted, declined or cancelled.
+//   - fromUid: string (required, == request.auth.uid)
+//   - toUid: string (required, != fromUid, must have a profile)
+//   - fromUsername / fromDisplayName: string (copied from sender profile)
+//   - toUsername / toDisplayName: string (copied from recipient profile)
+//   - createdAt: timestamp (== request.time)
+//
+// Collection: users/{uid}/friends Document ID: {friendUid}
+//   One document on each side of a friendship. Can only be created while
+//   the matching friend request exists (i.e. by accepting it).
+//   - uid: string (== friendUid)
+//   - username / displayName: string (copied from the friend's profile)
+//   - since: timestamp (== request.time)
+//
+// Collection: users/{uid}/activity Document ID: auto
+//   Reading activity, visible to the owner and their friends only.
+//   - type: 'started' | 'finished' | 'badge' | 'review'
+//   - title, author, bookKey: string (<= 200 chars, may be empty for badges)
+//   - badgeId, badgeTitle: string (<= 60 chars, may be empty)
+//   - rating: int 0..5 (0 when not a review)
+//   - createdAt: timestamp (== request.time)
+//
+// Collection: books/{bookKey}/reviews Document ID: {uid}
+//   One review per user per book, readable by any signed-in user.
+//   - uid: string (== document ID == request.auth.uid, immutable)
+//   - username / displayName: string (copied from the author's profile)
+//   - rating: int 1..5
+//   - text: string (<= 2000 chars, may be empty)
+//   - title, author: string (<= 200 chars)
+//   - createdAt: timestamp (== request.time on create, immutable)
+//   - updatedAt: timestamp (== request.time on every write)
+//
+// Counts on profiles are self-reported by the app and are not verified
+// server-side; treat them as informational.
+// ===============================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // -------------------------------------------------------------
+    // Helper functions
+    // -------------------------------------------------------------
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function uidUnchanged() {
+      return incoming().uid == resource.data.uid;
+    }
+
+    function uidNotModified() {
+      return !incoming().diff(resource.data).affectedKeys().hasAny(['uid']);
+    }
+
+    function isString(value, min, max) {
+      return value is string && value.size() >= min && value.size() <= max;
+    }
+
+    function isInt(value, min, max) {
+      return value is int && value >= min && value <= max;
+    }
+
+    function profilePath(uid) {
+      return /databases/$(database)/documents/profiles/$(uid);
+    }
+
+    function profileOf(uid) {
+      return get(profilePath(uid)).data;
+    }
+
+    function areFriends(ownerUid, otherUid) {
+      return exists(/databases/$(database)/documents/users/$(ownerUid)/friends/$(otherUid));
+    }
+
+    function requestExists(fromUid, toUid) {
+      return exists(/databases/$(database)/documents/friendRequests/$(fromUid + '_' + toUid));
+    }
+
+    // -------------------------------------------------------------
+    // Domain validators
+    // -------------------------------------------------------------
+    function isValidUsername(name) {
+      return name is string && name.matches('^[A-Za-z0-9_]{3,20}$');
+    }
+
+    function isValidProfile(uid) {
+      let data = incoming();
+      return data.keys().hasOnly(['uid', 'username', 'usernameLower', 'displayName',
+          'booksFinished', 'currentStreak', 'longestStreak', 'badgeCount',
+          'createdAt', 'updatedAt'])
+        && data.keys().hasAll(['uid', 'username', 'usernameLower', 'displayName',
+          'booksFinished', 'currentStreak', 'longestStreak', 'badgeCount',
+          'createdAt', 'updatedAt'])
+        && data.uid == uid
+        && isValidUsername(data.username)
+        && data.usernameLower == data.username.lower()
+        && isString(data.displayName, 1, 50)
+        && isInt(data.booksFinished, 0, 100000)
+        && isInt(data.currentStreak, 0, 100000)
+        && isInt(data.longestStreak, 0, 100000)
+        && isInt(data.badgeCount, 0, 100)
+        && data.createdAt is timestamp
+        && data.updatedAt == request.time;
+    }
+
+    function isValidFriendRequest(fromUid, toUid) {
+      let data = incoming();
+      let sender = profileOf(fromUid);
+      let recipient = profileOf(toUid);
+      return data.keys().hasOnly(['fromUid', 'toUid', 'fromUsername', 'fromDisplayName',
+          'toUsername', 'toDisplayName', 'createdAt'])
+        && data.keys().hasAll(['fromUid', 'toUid', 'fromUsername', 'fromDisplayName',
+          'toUsername', 'toDisplayName', 'createdAt'])
+        && data.fromUid == fromUid
+        && data.toUid == toUid
+        && fromUid != toUid
+        && data.fromUsername == sender.username
+        && data.fromDisplayName == sender.displayName
+        && data.toUsername == recipient.username
+        && data.toDisplayName == recipient.displayName
+        && data.createdAt == request.time;
+    }
+
+    function isValidFriend(friendUid) {
+      let data = incoming();
+      let friend = profileOf(friendUid);
+      return data.keys().hasOnly(['uid', 'username', 'displayName', 'since'])
+        && data.keys().hasAll(['uid', 'username', 'displayName', 'since'])
+        && data.uid == friendUid
+        && data.username == friend.username
+        && data.displayName == friend.displayName
+        && data.since == request.time;
+    }
+
+    function isValidActivity() {
+      let data = incoming();
+      return data.keys().hasOnly(['type', 'title', 'author', 'bookKey', 'badgeId',
+          'badgeTitle', 'rating', 'createdAt'])
+        && data.keys().hasAll(['type', 'title', 'author', 'bookKey', 'badgeId',
+          'badgeTitle', 'rating', 'createdAt'])
+        && data.type in ['started', 'finished', 'badge', 'review']
+        && isString(data.title, 0, 200)
+        && isString(data.author, 0, 200)
+        && isString(data.bookKey, 0, 200)
+        && isString(data.badgeId, 0, 60)
+        && isString(data.badgeTitle, 0, 60)
+        && isInt(data.rating, 0, 5)
+        && data.createdAt == request.time;
+    }
+
+    function isValidReview(uid) {
+      let data = incoming();
+      let author = profileOf(uid);
+      return data.keys().hasOnly(['uid', 'username', 'displayName', 'rating', 'text',
+          'title', 'author', 'createdAt', 'updatedAt'])
+        && data.keys().hasAll(['uid', 'username', 'displayName', 'rating', 'text',
+          'title', 'author', 'createdAt', 'updatedAt'])
+        && data.uid == uid
+        && data.username == author.username
+        && data.displayName == author.displayName
+        && isInt(data.rating, 1, 5)
+        && isString(data.text, 0, 2000)
+        && isString(data.title, 1, 200)
+        && isString(data.author, 0, 200)
+        && data.createdAt is timestamp
+        && data.updatedAt == request.time;
+    }
+
+    // -------------------------------------------------------------
+    // profiles
+    // -------------------------------------------------------------
+    match /profiles/{uid} {
+      allow read: if isAuthenticated();
+      allow create: if isOwner(uid)
+        && isValidProfile(uid)
+        && incoming().createdAt == request.time
+        // The username must be claimed for this user in the same batch.
+        && getAfter(/databases/$(database)/documents/usernames/$(incoming().usernameLower)).data.uid == uid;
+      allow update: if isOwner(uid)
+        && isValidProfile(uid)
+        && uidNotModified()
+        && !incoming().diff(resource.data).affectedKeys()
+            .hasAny(['username', 'usernameLower', 'createdAt']);
+      allow delete: if false;
+    }
+
+    // -------------------------------------------------------------
+    // usernames
+    // -------------------------------------------------------------
+    match /usernames/{name} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated()
+        && name.matches('^[a-z0-9_]{3,20}$')
+        && incoming().keys().hasOnly(['uid'])
+        && incoming().uid == request.auth.uid
+        // Created together with the owner's profile, which must point back.
+        && !exists(profilePath(request.auth.uid))
+        && getAfter(profilePath(request.auth.uid)).data.usernameLower == name;
+      allow update, delete: if false;
+    }
+
+    // -------------------------------------------------------------
+    // friendRequests
+    // -------------------------------------------------------------
+    match /friendRequests/{requestId} {
+      allow read: if isAuthenticated()
+        && (resource.data.fromUid == request.auth.uid
+            || resource.data.toUid == request.auth.uid);
+      allow create: if isAuthenticated()
+        && incoming().fromUid == request.auth.uid
+        && requestId == incoming().fromUid + '_' + incoming().toUid
+        && exists(profilePath(incoming().toUid))
+        && !areFriends(incoming().fromUid, incoming().toUid)
+        && isValidFriendRequest(incoming().fromUid, incoming().toUid);
+      allow update: if false;
+      allow delete: if isAuthenticated()
+        && (resource.data.fromUid == request.auth.uid
+            || resource.data.toUid == request.auth.uid);
+    }
+
+    // -------------------------------------------------------------
+    // users/{uid}/friends and users/{uid}/activity
+    // -------------------------------------------------------------
+    match /users/{ownerUid} {
+      allow read, write: if false;
+
+      match /friends/{friendUid} {
+        allow read: if isOwner(ownerUid);
+        // Accepting request friendUid -> ownerUid (recipient writes own side),
+        // or request ownerUid -> friendUid (recipient writes sender's side).
+        // exists() sees the state before the batch, so the request may be
+        // deleted in the same batch.
+        allow create: if isAuthenticated()
+          && ((request.auth.uid == ownerUid && requestExists(friendUid, ownerUid))
+              || (request.auth.uid == friendUid && requestExists(ownerUid, friendUid)))
+          && isValidFriend(friendUid);
+        allow update: if false;
+        allow delete: if isOwner(ownerUid) || isOwner(friendUid);
+      }
+
+      match /activity/{activityId} {
+        allow read: if isOwner(ownerUid)
+          || (isAuthenticated() && areFriends(ownerUid, request.auth.uid));
+        allow create: if isOwner(ownerUid) && isValidActivity();
+        allow update: if false;
+        allow delete: if isOwner(ownerUid);
+      }
+    }
+
+    // -------------------------------------------------------------
+    // books/{bookKey}/reviews
+    // -------------------------------------------------------------
+    match /books/{bookKey} {
+      allow read, write: if false;
+
+      match /reviews/{uid} {
+        allow read: if isAuthenticated();
+        allow create: if isOwner(uid)
+          && bookKey.size() <= 200
+          && isValidReview(uid)
+          && incoming().createdAt == request.time;
+        allow update: if isOwner(uid)
+          && isValidReview(uid)
+          && uidUnchanged()
+          && incoming().createdAt == resource.data.createdAt;
+        allow delete: if isOwner(uid);
+      }
+    }
+  }
+}

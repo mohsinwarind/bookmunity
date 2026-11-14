@@ -22,7 +22,7 @@ class _DesignGalleryState extends State<DesignGallery> {
       child: Builder(
         builder: (context) => Scaffold(
           appBar: BrutalAppBar(
-            title: 'Bookmunity / Gallery',
+            title: 'Design gallery',
             actions: [
               Padding(
                 padding: const EdgeInsets.only(right: 12),
@@ -37,11 +37,11 @@ class _DesignGalleryState extends State<DesignGallery> {
             padding: const EdgeInsets.all(20),
             children: [
               Text(
-                'DESIGN SYSTEM',
+                'Design system',
                 style: Theme.of(context).textTheme.headlineLarge,
               ),
               const SizedBox(height: 8),
-              const Text('PHASE 1 / FLAT. LOUD. DELIBERATE.'),
+              const Text('Calm neo-brutalism: outlines, soft offsets, muted colour.'),
               const SizedBox(height: 24),
               BrutalCard(
                 backgroundColor: BrutalColors.yellow,
@@ -49,8 +49,9 @@ class _DesignGalleryState extends State<DesignGallery> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'BUTTONS',
-                      style: Theme.of(context).textTheme.headlineSmall,
+                      'Buttons',
+                      style: Theme.of(context).textTheme.headlineSmall
+                          ?.copyWith(color: BrutalColors.ink),
                     ),
                     const SizedBox(height: 16),
                     Wrap(
@@ -59,12 +60,13 @@ class _DesignGalleryState extends State<DesignGallery> {
                       children: [
                         BrutalPressable(
                           onPressed: () {},
-                          child: const Text('IMPORT +'),
+                          child: const Text('Add book'),
                         ),
                         BrutalPressable(
                           onPressed: enabled ? () {} : null,
                           backgroundColor: BrutalColors.red,
-                          child: const Text('DELETE'),
+                          foregroundColor: Colors.white,
+                          child: const Text('Delete'),
                         ),
                       ],
                     ),
@@ -72,7 +74,7 @@ class _DesignGalleryState extends State<DesignGallery> {
                 ),
               ),
               const SizedBox(height: 20),
-              const Text('CHIPS'),
+              const Text('Chips'),
               const SizedBox(height: 10),
               Wrap(
                 spacing: 10,
@@ -88,25 +90,23 @@ class _DesignGalleryState extends State<DesignGallery> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('PROGRESS'),
+                    const Text('Progress'),
                     const SizedBox(height: 10),
                     BrutalProgressBar(value: progress),
                     Slider(
                       value: progress,
                       onChanged: (value) => setState(() => progress = value),
-                      activeColor: BrutalColors.blue,
-                      inactiveColor: Theme.of(context).colorScheme.onSurface,
                     ),
                   ],
                 ),
               ),
               const SizedBox(height: 20),
-              const Text('INPUT'),
+              const Text('Input'),
               const SizedBox(height: 10),
               const TextField(
                 decoration: InputDecoration(
-                  labelText: 'BOOK TITLE',
-                  hintText: 'TYPE HERE',
+                  labelText: 'Book title',
+                  hintText: 'Type here',
                 ),
               ),
               const SizedBox(height: 20),
@@ -115,7 +115,7 @@ class _DesignGalleryState extends State<DesignGallery> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('ENABLE READING MODE'),
+                    const Text('Keep screen on'),
                     BrutalSwitch(
                       value: enabled,
                       onChanged: (value) => setState(() => enabled = value),

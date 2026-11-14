@@ -72,6 +72,7 @@ class EpubImportService {
         bookKey: Value(metadata.bookKey),
         addedAt: now,
         coverPath: Value(coverPath),
+        genre: Value(metadata.genre),
       ),
     );
     return ImportResult(title: metadata.title, duplicate: false);
@@ -100,7 +101,8 @@ class EpubImportService {
       title: metadata.title,
       author: metadata.author,
       bookKey: metadata.bookKey,
-      coverPath: coverPath,
+      coverPath: coverPath ?? book.coverPath,
+      genre: metadata.genre,
     );
   }
 

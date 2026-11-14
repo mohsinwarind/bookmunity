@@ -11,12 +11,16 @@ class EpubMetadata {
     required this.author,
     required this.bookKey,
     required this.coverBytes,
+    this.genre,
   });
 
   final String title;
   final String author;
   final String bookKey;
   final List<int>? coverBytes;
+
+  /// First usable `dc:subject`, used as a coarse genre for achievements.
+  final String? genre;
 }
 
 class EpubMetadataExtractor {
@@ -46,6 +50,7 @@ class EpubMetadataExtractor {
     final author = _metadataValues(metadata, 'creator').join(', ');
     final identifier = _metadataValues(metadata, 'identifier').firstOrNull;
     final cover = _findCover(archive, rootfile, opf, items, spine);
+    final genre = _genre(_metadataValues(metadata, 'subject'));
 
     return EpubMetadata(
       title: _clean(title),
@@ -56,7 +61,37 @@ class EpubMetadataExtractor {
         author.isEmpty ? 'UNKNOWN AUTHOR' : author,
       ),
       coverBytes: cover == null ? null : _resizeCover(cover),
+      genre: genre,
     );
+  }
+
+  /// Subjects are free text and often hierarchical ("Fiction -- Fantasy",
+  /// "England -- Fiction"). Prefer the most specific fiction/non-fiction
+  /// facet, normalised to title case so equivalent subjects compare equal.
+  String? _genre(List<String> subjects) {
+    for (final subject in subjects) {
+      final parts = subject
+          .split(RegExp(r'\s*(?:--|/|>|;)\s*'))
+          .map(_clean)
+          .where((part) => part.isNotEmpty)
+          .toList();
+      if (parts.isEmpty) continue;
+      final generic = {'fiction', 'nonfiction', 'non-fiction', 'juvenile fiction'};
+      final specific = parts.lastWhere(
+        (part) => !generic.contains(part.toLowerCase()),
+        orElse: () => parts.last,
+      );
+      if (specific.length > 60) continue;
+      return specific
+          .split(' ')
+          .map(
+            (word) => word.isEmpty
+                ? word
+                : word[0].toUpperCase() + word.substring(1).toLowerCase(),
+          )
+          .join(' ');
+    }
+    return null;
   }
 
   XmlDocument _document(Archive archive, String path) {
